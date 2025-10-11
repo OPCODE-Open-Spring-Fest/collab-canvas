@@ -1,7 +1,7 @@
 import "./App.css";
 
 function App() {
-    return <>Welcome to Collab Canvas!</>;
+    return <div className="text-5xl text-center">Welcome to Collab Canvas!</div>;
 }
 
 export default App;
