@@ -11,7 +11,7 @@ We welcome all kinds of contributions: bug fixes, new features, documentation im
 2. **Clone your fork**
 
     ```bash
-    git clone https://github.com/ayushivam22/collab-canvas.git
+    git clone https://github.com/your-username/collab-canvas.git
     cd collab-canvas
     ```
 
