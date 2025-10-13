@@ -1,7 +1,12 @@
-import "./App.css";
+import React from "react";
+import Canvas from "../components/Canvas";
 
 function App() {
-    return <div className="text-5xl text-center">Welcome to Collab Canvas!</div>;
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <Canvas />
+    </div>
+  );
 }
 
 export default App;
