@@ -1,7 +1,11 @@
-import "./App.css";
+import { Canvas } from "./components/Canvas";
 
 function App() {
-    return <div className="text-5xl text-center">Welcome to Collab Canvas!</div>;
+    return (
+        <main className="w-full h-screen">
+            <Canvas />
+        </main>
+    )
 }
 
 export default App;
