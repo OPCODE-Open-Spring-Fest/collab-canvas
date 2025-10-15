@@ -1,10 +1,13 @@
 import { Canvas } from "./components/Canvas";
+import { SocketProvider } from "./contexts/SocketContext";
 
 function App() {
     return (
-        <main className="w-full h-screen">
-            <Canvas />
-        </main>
+        <SocketProvider>
+            <main className="w-full h-screen">
+                <Canvas />
+            </main>
+        </SocketProvider>
     )
 }
 

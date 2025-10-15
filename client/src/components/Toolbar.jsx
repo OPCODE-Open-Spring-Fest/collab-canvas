@@ -15,7 +15,7 @@ export const Toolbar = ({ activeTool, onToolChange, onClear }) => {
 
     return (
         <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50">
-            <div className="bg-toolbar border border-toolbar-border rounded-2xl shadow-xl backdrop-blur-sm p-2 flex items-center gap-2">
+            <div className="bg-white/95 border border-gray-200/50 rounded-2xl shadow-xl backdrop-blur-md p-3 flex items-center gap-1 animate-float">
                 {tools.map((tool) => {
                     const Icon = tool.icon;
                     return (
@@ -25,8 +25,8 @@ export const Toolbar = ({ activeTool, onToolChange, onClear }) => {
                             size="icon"
                             onClick={() => onToolChange(tool.type)}
                             className={cn(
-                                "h-10 w-10 transition-all duration-200 hover:bg-secondary",
-                                activeTool === tool.type && "bg-primary text-primary-foreground hover:bg-primary/90"
+                                "h-11 w-11 transition-all duration-200 hover:bg-gray-100 rounded-xl",
+                                activeTool === tool.type && "bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700 shadow-lg"
                             )}
                             aria-label={tool.type}
                         >
@@ -35,13 +35,13 @@ export const Toolbar = ({ activeTool, onToolChange, onClear }) => {
                     );
                 })}
 
-                <Separator orientation="vertical" className="h-8 mx-1" />
+                <Separator orientation="vertical" className="h-8 mx-2 bg-gray-200" />
 
                 <Button
                     variant="ghost"
                     size="icon"
                     onClick={onClear}
-                    className="h-10 w-10 transition-all duration-200 hover:bg-destructive/10 hover:text-destructive"
+                    className="h-11 w-11 transition-all duration-200 hover:bg-red-50 hover:text-red-600 rounded-xl"
                     aria-label="Clear canvas"
                 >
                     <Trash2 className="h-5 w-5" />
