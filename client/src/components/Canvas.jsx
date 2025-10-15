@@ -10,6 +10,7 @@ export const Canvas = () => {
     const [activeColor, setActiveColor] = useState("#000000");
     const [strokeWidth, setStrokeWidth] = useState(3);
     const [isDrawing, setIsDrawing] = useState(false);
+    const [isCanvasFocused, setIsCanvasFocused] = useState(false); // 👈 new state
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -32,6 +33,22 @@ export const Canvas = () => {
 
         return () => window.removeEventListener("resize", handleResize);
     }, []);
+
+    // 🎹 Keyboard shortcut handling
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (!isCanvasFocused) return; // only when canvas focused
+
+            if (e.key === "p" || e.key === "P" || e.key === "1") {
+                handleToolChange("pen");
+            } else if (e.key === "e" || e.key === "E" || e.key === "2") {
+                handleToolChange("eraser");
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isCanvasFocused]);
 
     const startDrawing = (e) => {
         if (activeTool !== "pen" && activeTool !== "eraser") return;
@@ -92,11 +109,14 @@ export const Canvas = () => {
 
             <canvas
                 ref={canvasRef}
+                tabIndex={0} // 👈 allows focus
+                onFocus={() => setIsCanvasFocused(true)} // 👈 activate shortcuts
+                onBlur={() => setIsCanvasFocused(false)} // 👈 deactivate shortcuts
                 onMouseDown={startDrawing}
                 onMouseMove={draw}
                 onMouseUp={stopDrawing}
                 onMouseLeave={stopDrawing}
-                className="cursor-crosshair"
+                className="cursor-crosshair focus:outline-2 focus:outline-primary"
             />
 
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 pointer-events-none">
