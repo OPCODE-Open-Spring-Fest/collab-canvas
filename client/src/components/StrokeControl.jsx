@@ -15,16 +15,18 @@ export const StrokeControl = ({ strokeWidth, onStrokeWidthChange }) => {
                         min={1}
                         max={20}
                         step={1}
-                        className="w-full"
+                        className="w-full border-2 border-border bg=black"
                     />
                     <div className="flex justify-center pt-2">
+                        <div className="relative h-10 flex items-center justify-center">
                         <div
-                            className="rounded-full bg-foreground transition-all duration-200"
+                            className="rounded-full bg-black transition-all duration-200"
                             style={{
                                 width: `${strokeWidth * 2}px`,
                                 height: `${strokeWidth * 2}px`,
                             }}
                         />
+                    </div>
                     </div>
                 </div>
             </div>
