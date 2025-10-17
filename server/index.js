@@ -4,8 +4,23 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
 app.use(express.json());
 app.use(cors());
+
+// Routes
+const authRoutes = require("./routes/authRoutes");
+app.use("/api/auth", authRoutes);
+
+// Root
+app.get("/", (req, res) => {
+  res.send("Collab Canvas server is running!");
+});
+
+app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
 
 const PORT = process.env.PORT || 3000;
 
