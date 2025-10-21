@@ -6,12 +6,16 @@ import {
   Circle,
   Minus,
   Trash2,
+  Download,
+  FileImage,
+  FileType,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/Button";
 import { Separator } from "./ui/Separator";
+import { DropdownMenu, DropdownMenuItem } from "./ui/DropdownMenu";
 
-export const Toolbar = ({ activeTool, onToolChange, onClear }) => {
+export const Toolbar = ({ activeTool, onToolChange, onClear, onExport }) => {
   const tools = [
     { type: "select", icon: MousePointer2 },
     { type: "pen", icon: Pen },
@@ -56,6 +60,34 @@ export const Toolbar = ({ activeTool, onToolChange, onClear }) => {
         >
           <Trash2 className="h-5 w-5" />
         </Button>
+
+        <Separator orientation="vertical" className="h-8 mx-1" />
+
+        <DropdownMenu
+          trigger={
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 transition-all duration-200 hover:bg-secondary"
+              aria-label="Export canvas"
+            >
+              <Download className="h-5 w-5" />
+            </Button>
+          }
+        >
+          <DropdownMenuItem onClick={() => onExport("png")}>
+            <FileImage className="h-4 w-4" />
+            Export as PNG
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onExport("svg")}>
+            <FileType className="h-4 w-4" />
+            Export as SVG
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onExport("pdf")}>
+            <FileType className="h-4 w-4" />
+            Export as PDF
+          </DropdownMenuItem>
+        </DropdownMenu>
       </div>
     </div>
   );
