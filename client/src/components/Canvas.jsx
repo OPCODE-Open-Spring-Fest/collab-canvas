@@ -4,6 +4,7 @@ import { ColorPicker } from "./ColorPicker";
 import { StrokeControl } from "./StrokeControl";
 import { toast } from "sonner";
 import { io } from "socket.io-client";
+import { jsPDF } from "jspdf";
 
 export const Canvas = () => {
   const canvasRef = useRef(null);
@@ -182,12 +183,64 @@ export const Canvas = () => {
     toast.info(`${tool.charAt(0).toUpperCase() + tool.slice(1)} tool selected`);
   };
 
+  const handleExport = (format) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    try {
+      if (format === "png") {
+        canvas.toBlob((blob) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `canvas-${Date.now()}.png`;
+          link.click();
+          URL.revokeObjectURL(url);
+          toast.success("Canvas exported as PNG!");
+        });
+      } else if (format === "svg") {
+        // Create SVG from canvas
+        const svgString = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
+            <foreignObject width="100%" height="100%">
+              <img xmlns="http://www.w3.org/1999/xhtml" src="${canvas.toDataURL()}" width="${canvas.width}" height="${canvas.height}"/>
+            </foreignObject>
+          </svg>
+        `;
+        const blob = new Blob([svgString], { type: "image/svg+xml" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `canvas-${Date.now()}.svg`;
+        link.click();
+        URL.revokeObjectURL(url);
+        toast.success("Canvas exported as SVG!");
+      } else if (format === "pdf") {
+        // Export as PDF using jsPDF
+        const imgData = canvas.toDataURL("image/png");
+        const pdf = new jsPDF({
+          orientation: canvas.width > canvas.height ? "landscape" : "portrait",
+          unit: "px",
+          format: [canvas.width, canvas.height],
+        });
+        
+        pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
+        pdf.save(`canvas-${Date.now()}.pdf`);
+        toast.success("Canvas exported as PDF!");
+      }
+    } catch (error) {
+      toast.error("Failed to export canvas!");
+      console.error("Export error:", error);
+    }
+  };
+
   return (
     <div className="relative w-full h-screen overflow-hidden bg-canvas">
       <Toolbar
         activeTool={activeTool}
         onToolChange={handleToolChange}
         onClear={handleClear}
+        onExport={handleExport}
       />
       <ColorPicker activeColor={activeColor} onColorChange={setActiveColor} />
       <StrokeControl
