@@ -1,7 +1,13 @@
+// index.js
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const dotenv = require("dotenv");
+const authRoutes = require("./routes/authRoutes");
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,31 +17,29 @@ app.use(express.json());
 app.use(cors());
 
 // Routes
-const authRoutes = require("./routes/authRoutes");
 app.use("/api/auth", authRoutes);
 
-// Root
+// Root route
 app.get("/", (req, res) => {
   res.send("Collab Canvas server is running!");
 });
 
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
 
-const PORT = process.env.PORT || 3000;
+// database connection
+const connectDB = require("./config/db");
+connectDB();
 
-// Basic root route
-app.get("/", (req, res) => res.send("Collab Canvas server running!"));
 
-// Create HTTP server and Socket.io
+// Create HTTP server and initialize Socket.io
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", // update with your frontend URL in production
+    origin: "*", // 🔒 Replace with your frontend URL in production
     methods: ["GET", "POST"],
   },
 });
 
+// Socket.io event handling
 io.on("connection", (socket) => {
   console.log("🟢 User connected:", socket.id);
 
@@ -45,10 +49,10 @@ io.on("connection", (socket) => {
     console.log(`User ${socket.id} joined room ${roomId}`);
   });
 
-  // Forward drawing events to all others in the room
+  // Forward drawing events to all others in the same room
   socket.on("draw", (data) => {
     const { roomId } = data;
-    socket.to(roomId).emit("draw", data); // forward full data
+    socket.to(roomId).emit("draw", data);
   });
 
   socket.on("disconnect", () => {
@@ -56,7 +60,7 @@ io.on("connection", (socket) => {
   });
 });
 
+// Start server
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
-})
