@@ -4,11 +4,10 @@ import { ColorPicker } from "./ColorPicker";
 import { StrokeControl } from "./StrokeControl";
 import { toast } from "sonner";
 import { io } from "socket.io-client";
-import { jsPDF } from "jspdf";
 
 export const Canvas = () => {
   const canvasRef = useRef(null);
-  const [activeTool, setActiveTool] = useState("pen"); // default = pen
+  const [activeTool, setActiveTool] = useState("pen");
   const [activeColor, setActiveColor] = useState("#000000");
   const [strokeWidth, setStrokeWidth] = useState(3);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -20,18 +19,19 @@ export const Canvas = () => {
 
   // Collaboration
   const [roomId, setRoomId] = useState("");
-  const [joined, setJoined] = useState(false);
+  const [joined, setJoined] = useState(false); // false = local mode
   const [socket, setSocket] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false); // controls modal visibility
 
-  // Initialize socket connection
+  // Initialize socket connection (always available but idle until joined)
   useEffect(() => {
-    const s = io("http://localhost:3000"); // replace with your backend URL
+    const s = io("http://localhost:3000");
     setSocket(s);
 
     s.on("connect", () => console.log("Connected to server:", s.id));
 
-    // Handle strokes from other users
     s.on("draw", ({ x, y, color, width, type, tool }) => {
+      if (!joined) return; // only listen when in collab mode
       const ctx = canvasRef.current?.getContext("2d");
       if (!ctx) return;
 
@@ -43,7 +43,7 @@ export const Canvas = () => {
     });
 
     return () => s.disconnect();
-  }, []);
+  }, [joined]);
 
   // Canvas setup
   useEffect(() => {
@@ -63,7 +63,7 @@ export const Canvas = () => {
     };
 
     window.addEventListener("resize", handleResize);
-    toast.success("Canvas ready! Start drawing!");
+    toast.success("Canvas ready! Local mode active.");
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
@@ -71,26 +71,16 @@ export const Canvas = () => {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (!isCanvasFocused) return;
-
-      if (e.key === "p" || e.key === "P" || e.key === "1") {
-        handleToolChange("pen");
-      } else if (e.key === "e" || e.key === "E" || e.key === "2") {
-        handleToolChange("eraser");
-      } else if (e.key === "l" || e.key === "L" || e.key === "3") {
-        handleToolChange("line");
-      }
+      if (e.key === "p" || e.key === "P" || e.key === "1") handleToolChange("pen");
+      else if (e.key === "e" || e.key === "E" || e.key === "2") handleToolChange("eraser");
+      else if (e.key === "l" || e.key === "L" || e.key === "3") handleToolChange("line");
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isCanvasFocused]);
 
   // Drawing logic
   const startDrawing = (e) => {
-    if (!joined) {
-      toast.error("Join a room first!");
-      return;
-    }
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!ctx) return;
@@ -105,15 +95,17 @@ export const Canvas = () => {
     if (activeTool === "pen" || activeTool === "eraser") {
       ctx.beginPath();
       ctx.moveTo(x, y);
-      socket.emit("draw", {
-        roomId,
-        x,
-        y,
-        type: "start",
-        color: activeColor,
-        width: strokeWidth,
-        tool: activeTool,
-      });
+
+      if (joined && socket)
+        socket.emit("draw", {
+          roomId,
+          x,
+          y,
+          type: "start",
+          color: activeColor,
+          width: strokeWidth,
+          tool: activeTool,
+        });
     }
 
     if (activeTool === "line") {
@@ -137,15 +129,16 @@ export const Canvas = () => {
       ctx.lineTo(x, y);
       ctx.stroke();
 
-      socket.emit("draw", {
-        roomId,
-        x,
-        y,
-        type: "move",
-        color: activeColor,
-        width: strokeWidth,
-        tool: activeTool,
-      });
+      if (joined && socket)
+        socket.emit("draw", {
+          roomId,
+          x,
+          y,
+          type: "move",
+          color: activeColor,
+          width: strokeWidth,
+          tool: activeTool,
+        });
     } else if (activeTool === "line") {
       ctx.putImageData(snapshot.current, 0, 0);
       ctx.beginPath();
@@ -175,7 +168,8 @@ export const Canvas = () => {
     if (!roomId.trim() || !socket) return;
     socket.emit("join-room", roomId.trim());
     setJoined(true);
-    toast.success(`Joined room: ${roomId}`);
+    setIsModalOpen(false);
+    toast.success(`Collaborative mode active - joined room: ${roomId}`);
   };
 
   const handleToolChange = (tool) => {
@@ -183,54 +177,11 @@ export const Canvas = () => {
     toast.info(`${tool.charAt(0).toUpperCase() + tool.slice(1)} tool selected`);
   };
 
-  const handleExport = (format) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    try {
-      if (format === "png") {
-        canvas.toBlob((blob) => {
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = `canvas-${Date.now()}.png`;
-          link.click();
-          URL.revokeObjectURL(url);
-          toast.success("Canvas exported as PNG!");
-        });
-      } else if (format === "svg") {
-        // Create SVG from canvas
-        const svgString = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
-            <foreignObject width="100%" height="100%">
-              <img xmlns="http://www.w3.org/1999/xhtml" src="${canvas.toDataURL()}" width="${canvas.width}" height="${canvas.height}"/>
-            </foreignObject>
-          </svg>
-        `;
-        const blob = new Blob([svgString], { type: "image/svg+xml" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `canvas-${Date.now()}.svg`;
-        link.click();
-        URL.revokeObjectURL(url);
-        toast.success("Canvas exported as SVG!");
-      } else if (format === "pdf") {
-        // Export as PDF using jsPDF
-        const imgData = canvas.toDataURL("image/png");
-        const pdf = new jsPDF({
-          orientation: canvas.width > canvas.height ? "landscape" : "portrait",
-          unit: "px",
-          format: [canvas.width, canvas.height],
-        });
-        
-        pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
-        pdf.save(`canvas-${Date.now()}.pdf`);
-        toast.success("Canvas exported as PDF!");
-      }
-    } catch (error) {
-      toast.error("Failed to export canvas!");
-      console.error("Export error:", error);
+  const handleExitRoom = () => {
+    if (socket) {
+      socket.emit("leave-room", roomId);
+      setJoined(false);
+      toast.success(`Left room: ${roomId}`);
     }
   };
 
@@ -240,8 +191,22 @@ export const Canvas = () => {
         activeTool={activeTool}
         onToolChange={handleToolChange}
         onClear={handleClear}
-        onExport={handleExport}
       />
+
+      {joined ?  <button
+        onClick={() => handleExitRoom()}
+        className="fixed top-4 right-4 bg-red-700 text-white px-4 py-2 rounded-lg shadow hover:bg-red-800 z-50"
+      >
+        Exit Room
+      </button>
+      : <button
+        onClick={() => setIsModalOpen(true)}
+        className="fixed top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 z-50"
+      >
+        Collaborate
+      </button> }
+     
+
       <ColorPicker activeColor={activeColor} onColorChange={setActiveColor} />
       <StrokeControl
         strokeWidth={strokeWidth}
@@ -260,7 +225,7 @@ export const Canvas = () => {
         className="cursor-crosshair focus:outline-2 focus:outline-primary"
       />
 
-      {!joined && (
+      {isModalOpen && (
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 border border-gray-400 rounded-xl shadow-xl p-6 z-50 flex flex-col items-center gap-3">
           <h2 className="text-xl font-semibold">Join a Room</h2>
           <input
@@ -276,13 +241,21 @@ export const Canvas = () => {
           >
             Join Room
           </button>
+          <button
+            onClick={() => setIsModalOpen(false)}
+            className="text-sm text-gray-600 mt-2 hover:underline"
+          >
+            Cancel
+          </button>
         </div>
       )}
 
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 pointer-events-none">
         <div className="bg-toolbar/95 border border-toolbar-border rounded-xl shadow-lg backdrop-blur-sm px-6 py-3">
           <p className="text-sm text-foreground font-medium">
-            Welcome to CollabCanvas — Select a tool and start drawing!
+            {joined
+              ? `Connected to Room: ${roomId}`
+              : "Local mode - your drawings are not shared."}
           </p>
         </div>
       </div>
