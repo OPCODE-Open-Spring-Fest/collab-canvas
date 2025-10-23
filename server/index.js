@@ -2,9 +2,13 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const connectDB = require("./config/db");
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const URL=process.env.MONGO_URI||"mongodb://localhost:27017/collab-canvas";
+connectDB(URL);
 
 // Middleware
 app.use(express.json());
