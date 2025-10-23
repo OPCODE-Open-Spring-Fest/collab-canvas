@@ -1,6 +1,7 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User"); 
+const registerSchema = require("../validations/authValidate").registerSchema;
 
 const tokenBlacklist = [];
 
@@ -8,6 +9,10 @@ const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 const JWT_EXPIRES_IN = "1h";
 
 exports.registerUser = async (req, res) => {
+    const validation = registerSchema.safeParse({ body: req.body });
+    if (!validation.success) {
+        return res.status(400).json({ message: "Invalid input", errors: validation.error.errors });
+    }
     try {
         console.log("Register body:", req.body);
         const { email, password } = req.body;
@@ -33,6 +38,10 @@ exports.registerUser = async (req, res) => {
 };
 
 exports.loginUser = async (req, res) => {
+    const validation = registerSchema.safeParse({ body: req.body });
+    if (!validation.success) {
+        return res.status(400).json({ message: "Invalid input", errors: validation.error.errors });
+    }
     try {
         console.log("Login body:", req.body);
         const { email, password } = req.body;
