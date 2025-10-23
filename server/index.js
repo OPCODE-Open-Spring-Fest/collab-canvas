@@ -19,19 +19,11 @@ app.get("/", (req, res) => {
   res.send("Collab Canvas server is running!");
 });
 
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-
-const PORT = process.env.PORT || 3000;
-
-// Basic root route
-app.get("/", (req, res) => res.send("Collab Canvas server running!"));
-
 // Create HTTP server and Socket.io
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", // update with your frontend URL in production
+    origin: "*", // change to your frontend URL in production
     methods: ["GET", "POST"],
   },
 });
@@ -48,7 +40,7 @@ io.on("connection", (socket) => {
   // Forward drawing events to all others in the room
   socket.on("draw", (data) => {
     const { roomId } = data;
-    socket.to(roomId).emit("draw", data); // forward full data
+    socket.to(roomId).emit("draw", data);
   });
 
   socket.on("disconnect", () => {
@@ -56,7 +48,7 @@ io.on("connection", (socket) => {
   });
 });
 
+// Only this one listen
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
-})

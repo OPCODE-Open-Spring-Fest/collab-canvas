@@ -22,6 +22,33 @@ export const Canvas = () => {
   const [socket, setSocket] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    !!localStorage.getItem("token")
+  );
+
+  const handleLogout = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    try {
+      const res = await fetch("http://localhost:3000/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.removeItem("token");
+        setIsLoggedIn(false);
+        toast.success("Logged out successfully!");
+      } else {
+        toast.error(data.message);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Logout failed!");
+    }
+  };
+
   useEffect(() => {
     const s = io("http://localhost:3000");
     setSocket(s);
@@ -181,6 +208,61 @@ export const Canvas = () => {
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-canvas">
+
+{/* 🔹 Login / Logout buttons */}
+<div className="fixed top-4 left-4 z-[9999]">
+  {isLoggedIn ? (
+    // Logout button if logged in
+    <button
+      onClick={handleLogout}
+      className="bg-red-600 text-white px-4 py-2 rounded-lg shadow hover:bg-red-700"
+    >
+      Logout
+    </button>
+  ) : (
+    <>
+      {/* Desktop view: two separate buttons */}
+      <div className="hidden sm:flex gap-3">
+        <button
+          onClick={() => window.location.href = "/login"}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700"
+        >
+          Sign In
+        </button>
+        <button
+          onClick={() => window.location.href = "/register"}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700"
+        >
+          Sign Up
+        </button>
+      </div>
+
+      {/* Mobile view: dropdown */}
+      <div className="sm:hidden relative">
+        <details className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow cursor-pointer select-none">
+          <summary className="outline-none list-none">Menu ☰</summary>
+          <div className="absolute left-0 mt-2 w-32 bg-white text-black rounded-lg shadow-lg border">
+            <button
+              onClick={() => window.location.href = "/login"}
+              className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => window.location.href = "/register"}
+              className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+            >
+              Sign Up
+            </button>
+          </div>
+        </details>
+      </div>
+    </>
+  )}
+</div>
+
+
+
       <Toolbar
         activeTool={activeTool}
         onToolChange={handleToolChange}
