@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Toolbar } from "./Toolbar";
 import { ColorPicker } from "./ColorPicker";
 import { StrokeControl } from "./StrokeControl";
+import { Cursor } from "./Cursor";
 import { toast } from "sonner";
 import { io } from "socket.io-client";
 import tinycolor from "tinycolor2";
@@ -28,9 +29,14 @@ export const Canvas = () => {
 
   // --- Collaboration State ---
   const [roomId, setRoomId] = useState("");
+  const [username, setUsername] = useState("");
   const [joined, setJoined] = useState(false);
   const [socket, setSocket] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // --- Cursor Tracking State ---
+  const [otherCursors, setOtherCursors] = useState(new Map()); // userId -> { x, y, username, color }
+  const cursorColors = useRef(new Map()); // userId -> color
 
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("token"));
 
@@ -115,12 +121,34 @@ export const Canvas = () => {
     canvasImage.current = canvas.toDataURL();
   };
 
+  // Generate a random color for a user
+  const getColorForUser = (userId) => {
+    if (!cursorColors.current.has(userId)) {
+      const colors = [
+        "#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", 
+        "#98D8C8", "#F7DC6F", "#BB8FCE", "#85C1E2",
+        "#F8B739", "#52D3AA", "#E74C3C", "#3498DB"
+      ];
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      cursorColors.current.set(userId, color);
+    }
+    return cursorColors.current.get(userId);
+  };
+
   useEffect(() => {
     const s = io("http://localhost:3000");
     setSocket(s);
-    s.on("connect", () => console.log("Connected to server:", s.id));
+    
+    s.on("connect", () => {
+      console.log("✅ Connected to server:", s.id);
+    });
+    
+    s.on("disconnect", () => {
+      console.log("❌ Disconnected from server");
+    });
+    
     s.on("draw", ({ x, y, color, width, type, tool }) => {
-      if (!joined) return;
+      console.log("📥 Received draw event:", { x, y, type, tool });
       const ctx = canvasRef.current?.getContext("2d");
       if (!ctx) return;
 
@@ -139,8 +167,80 @@ export const Canvas = () => {
       ctx.restore(); // Restore to default transform
       saveCanvasState(); // Save state after remote draw
     });
-    return () => s.disconnect();
-  }, [joined, scale, offset]); // Add scale/offset dependencies
+    
+    // Handle cursor movements from other users
+    s.on("cursor-move", ({ userId, x, y }) => {
+      console.log("🖱️ Received cursor from:", userId, "at", x, y);
+      setOtherCursors((prev) => {
+        const updated = new Map(prev);
+        const existing = updated.get(userId) || {};
+        const newCursor = {
+          x,
+          y,
+          username: existing.username || `User-${userId.slice(0, 4)}`,
+          color: getColorForUser(userId)
+        };
+        console.log("📌 Setting cursor:", userId, newCursor);
+        updated.set(userId, newCursor);
+        console.log("🗺️ Total cursors:", updated.size);
+        return updated;
+      });
+    });
+    
+    // Handle new user joining
+    s.on("user-joined", ({ userId, username }) => {
+      console.log("👤 User joined:", username, "(ID:", userId, ")");
+      setOtherCursors((prev) => {
+        const updated = new Map(prev);
+        updated.set(userId, {
+          x: 0,
+          y: 0,
+          username,
+          color: getColorForUser(userId)
+        });
+        console.log("🗺️ Total cursors after join:", updated.size);
+        return updated;
+      });
+      toast.info(`${username} joined the room`);
+    });
+    
+    // Handle existing users when joining
+    s.on("existing-users", (users) => {
+      console.log("👥 Existing users:", users);
+      setOtherCursors((prev) => {
+        const updated = new Map(prev);
+        users.forEach(({ userId, username }) => {
+          updated.set(userId, {
+            x: 0,
+            y: 0,
+            username,
+            color: getColorForUser(userId)
+          });
+        });
+        return updated;
+      });
+    });
+    
+    // Handle user leaving
+    s.on("user-left", ({ userId }) => {
+      console.log("👋 User left:", userId);
+      setOtherCursors((prev) => {
+        const updated = new Map(prev);
+        const user = updated.get(userId);
+        updated.delete(userId);
+        cursorColors.current.delete(userId);
+        if (user) {
+          toast.info(`${user.username} left the room`);
+        }
+        return updated;
+      });
+    });
+    
+    return () => {
+      console.log("🔌 Disconnecting socket...");
+      s.disconnect();
+    };
+  }, []); // Remove dependencies to prevent socket recreation!
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -527,7 +627,9 @@ export const Canvas = () => {
   // --- Collaboration Handlers (Unchanged) ---
   const handleJoinRoom = () => {
     if (!roomId.trim() || !socket) return;
-    socket.emit("join-room", roomId.trim());
+    const displayName = username.trim() || `User-${socket.id?.slice(0, 4)}`;
+    console.log("🚨 Joining room:", roomId.trim(), "as", displayName);
+    socket.emit("join-room", roomId.trim(), displayName);
     setJoined(true);
     setIsModalOpen(false);
     toast.success(`Collaborative mode active - joined room: ${roomId}`);
@@ -542,6 +644,8 @@ export const Canvas = () => {
     if (socket) {
       socket.emit("leave-room", roomId);
       setJoined(false);
+      setOtherCursors(new Map()); // Clear all cursors
+      cursorColors.current.clear(); // Clear color mappings
       toast.success(`Left room: ${roomId}`);
     }
   };
@@ -641,17 +745,45 @@ export const Canvas = () => {
         onFocus={() => setIsCanvasFocused(true)}
         onBlur={() => setIsCanvasFocused(false)}
         onMouseDown={startDrawing}
-        onMouseMove={draw}
+        onMouseMove={(e) => {
+          // Send cursor position to other users when in a room
+          if (joined && socket) {
+            const { x, y } = getWorldPoint(e);
+            socket.emit("cursor-move", { roomId, x, y });
+          }
+          draw(e);
+        }}
         onMouseUp={stopDrawing}
         onMouseLeave={stopDrawing}
         onWheel={handleWheel} // Added wheel handler
         className={`${getCursor()} focus:outline-2 focus:outline-primary`} // Dynamic cursor
       />
+      
+      {/* --- Render Other Users' Cursors --- */}
+      {joined && Array.from(otherCursors.entries()).map(([userId, cursor]) => {
+        console.log("🎯 Rendering cursor for:", userId, cursor);
+        return (
+          <Cursor
+            key={userId}
+            x={cursor.x * scale + offset.x}
+            y={cursor.y * scale + offset.y}
+            username={cursor.username}
+            color={cursor.color}
+          />
+        );
+      })}
 
       {/* --- Modal and Info (Unchanged) --- */}
       {isModalOpen && (
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 border border-gray-400 rounded-xl shadow-xl p-6 z-50 flex flex-col items-center gap-3">
           <h2 className="text-xl font-semibold">Join a Room</h2>
+          <input
+            type="text"
+            placeholder="Enter Your Name"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="border border-gray-400 rounded-md px-4 py-2 w-64 text-center"
+          />
           <input
             type="text"
             placeholder="Enter Room ID"
