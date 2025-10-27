@@ -4,12 +4,9 @@ import { ColorPicker } from "./ColorPicker";
 import { StrokeControl } from "./StrokeControl";
 import { toast } from "sonner";
 import { io } from "socket.io-client";
-<<<<<<< Updated upstream
-=======
 import tinycolor from "tinycolor2";
 import { jsPDF } from "jspdf";
 import C2S from "canvas2svg";
->>>>>>> Stashed changes
 
 export const Canvas = () => {
   const canvasRef = useRef(null);
@@ -37,9 +34,7 @@ export const Canvas = () => {
   const [socket, setSocket] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const [isLoggedIn, setIsLoggedIn] = useState(
-    !!localStorage.getItem("token")
-  );
+  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("token"));
 
   const handleLogout = async () => {
     // ... (existing logout logic - unchanged)
@@ -263,9 +258,15 @@ export const Canvas = () => {
     startPoint.current = { x, y };
     setIsDrawing(true);
 
-    if (activeTool === "pen" || activeTool === "eraser") {
+    // Begin drawing for pen, eraser, or brush tools
+    if (
+      activeTool === "pen" ||
+      activeTool === "eraser" ||
+      activeTool.startsWith("brush-")
+    ) {
       ctx.beginPath();
       ctx.moveTo(x, y);
+
       if (joined && socket)
         socket.emit("draw", {
           roomId,
@@ -278,28 +279,28 @@ export const Canvas = () => {
         });
     }
 
-    // Save snapshot for preview tools
+    // Snapshot for line/rectangle previews
     if (activeTool === "line" || activeTool === "rectangle") {
-      // Snapshot must be taken from the *un-transformed* context
-      ctx.restore(); // Restore *before* getImageData
+      ctx.restore(); // restore before snapshot
       snapshot.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      // Re-save to apply transform again for next draw
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.translate(offset.x, offset.y);
       ctx.scale(scale, scale);
     }
+
     ctx.restore(); // Restore transform
   };
 
   const draw = (e) => {
-    if (!isPointerDown) return;
+    if (!isPointerDown || !isDrawing) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!ctx) return;
 
     // Apply transform
+
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.translate(offset.x, offset.y);
@@ -317,25 +318,121 @@ export const Canvas = () => {
       return;
     }
 
-    if (!isDrawing) {
-      ctx.restore();
-      return;
-    }
+    // --- Brush / Pen / Eraser Tools ---
+    if (
+      activeTool === "pen" ||
+      activeTool === "eraser" ||
+      activeTool.startsWith("brush-")
+    ) {
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.setLineDash([]);
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
 
-    // --- Handle Drawing ---
-    if (activeTool === "pen" || activeTool === "eraser") {
-      ctx.strokeStyle = activeTool === "eraser" ? "#ffffff" : activeColor;
-      ctx.lineWidth = activeTool === "eraser" ? strokeWidth * 3 : strokeWidth;
+      let color = activeColor;
+      let width = strokeWidth;
+
+      if (activeTool === "eraser") {
+        color = "#ffffff";
+        width = strokeWidth * 3;
+      }
+
+      if (activeTool.startsWith("brush-")) {
+        const brush = activeTool.split("-")[1];
+        switch (brush) {
+          case "dashed": {
+            const dashLength = strokeWidth * 4; 
+            const gapLength = strokeWidth * 2.5;
+            ctx.setLineDash([dashLength, gapLength]);
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+
+            ctx.strokeStyle = activeColor;
+            ctx.lineWidth = strokeWidth;
+
+            const jitterX = x + (Math.random() - 0.5) * 0.5;
+            const jitterY = y + (Math.random() - 0.5) * 0.5;
+            ctx.lineTo(jitterX, jitterY);
+            ctx.stroke();
+            break;
+          }
+
+          case "paint":
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 12;
+            ctx.globalAlpha = 0.5 + Math.random() * 0.2;
+            width = strokeWidth * 2;
+            break;
+          case "crayon":
+            ctx.globalAlpha = 0.8;
+            ctx.shadowBlur = 5;
+            for (let i = 0; i < 4; i++) {
+              const jitterX = x + (Math.random() - 0.5) * 1.5;
+              const jitterY = y + (Math.random() - 0.5) * 1.5;
+              ctx.lineTo(jitterX, jitterY);
+            }
+            break;
+          case "oil-pastel": {
+            console.log("this is oil")
+            ctx.setLineDash([]);
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+
+            const steps = 10; 
+            for (let i = 0; i < steps; i++) {
+              const jitterX = x + (Math.random() - 0.5) * 5;
+              const jitterY = y + (Math.random() - 0.5) * 5;
+              const jitterWidth = strokeWidth * (0.8 + Math.random() * 0.6);
+              const opacity = 0.1 + Math.random() * 0.15;
+              const color = tinycolor(activeColor)
+                .brighten((Math.random() - 0.5) * 8)
+                .setAlpha(opacity)
+                .toRgbString();
+
+              ctx.strokeStyle = color;
+              ctx.lineWidth = jitterWidth;
+
+              ctx.beginPath();
+              ctx.moveTo(
+                startPoint.current.x + (Math.random() - 0.5) * 3,
+                startPoint.current.y + (Math.random() - 0.5) * 3
+              );
+              ctx.lineTo(jitterX, jitterY);
+              ctx.stroke();
+            }
+            ctx.shadowColor = activeColor;
+            ctx.shadowBlur = 2;
+            ctx.globalAlpha = 0.7;
+            ctx.lineWidth = strokeWidth * 1.5;
+            ctx.beginPath();
+            ctx.moveTo(startPoint.current.x, startPoint.current.y);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+            break;
+          }
+
+          default:
+            ctx.setLineDash([]);
+        }
+      }
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+
       ctx.lineTo(x, y);
       ctx.stroke();
+
       if (joined && socket)
         socket.emit("draw", {
           roomId,
-          x, // Send WORLD coordinates
-          y, // Send WORLD coordinates
+          x,
+          y,
           type: "move",
-          color: activeColor,
-          width: strokeWidth,
+          color,
+          width,
           tool: activeTool,
         });
     } else if (activeTool === "line" || activeTool === "rectangle") {
@@ -459,7 +556,7 @@ export const Canvas = () => {
     return "cursor-crosshair";
   };
 
- const handleExport = (format) => {
+  const handleExport = (format) => {
   const canvas = canvasRef.current;
   if (!canvas) return;
 
@@ -485,7 +582,7 @@ export const Canvas = () => {
     }
 
     case "svg": {
-       const svgCtx = new C2S(canvas.width, canvas.height);
+      const svgCtx = new C2S(canvas.width, canvas.height);
     const svgData = svgCtx.getSerializedSvg();
     const blob = new Blob([svgData], { type: "image/svg+xml" });
     const link = document.createElement("a");
