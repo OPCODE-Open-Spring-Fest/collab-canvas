@@ -28,6 +28,10 @@ export const Toolbar = ({ activeTool, onToolChange, onClear, onExport }) => {
     { type: "line", icon: Minus },
   ];
 
+  const handleExport = (format) => {
+    onExport(format);
+  }
+
   const brushTypes = [
     {
       id: "solid",
@@ -143,15 +147,15 @@ export const Toolbar = ({ activeTool, onToolChange, onClear, onExport }) => {
             </Button>
           }
         >
-          <DropdownMenuItem onClick={() => onExport("png")}>
+          <DropdownMenuItem onClick={() => handleExport("png")}>
             <FileImage className="h-4 w-4" />
             Export as PNG
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onExport("svg")}>
+          <DropdownMenuItem onClick={() => handleExport("svg")}>
             <FileType className="h-4 w-4" />
             Export as SVG
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onExport("pdf")}>
+          <DropdownMenuItem onClick={() => handleExport("pdf")}>
             <FileType className="h-4 w-4" />
             Export as PDF
           </DropdownMenuItem>
