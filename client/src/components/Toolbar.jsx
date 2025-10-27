@@ -23,6 +23,50 @@ export const Toolbar = ({ activeTool, onToolChange, onClear, onExport }) => {
     { type: "rectangle", icon: Square },
     { type: "circle", icon: Circle },
     { type: "line", icon: Minus },
+<<<<<<< Updated upstream
+=======
+    
+  ];
+
+  const handleExport = (format) => {
+    onExport(format);
+  }
+
+  const brushTypes = [
+    {
+      id: "solid",
+      label: "Solid",
+      preview: <div className="w-10 h-1 bg-black rounded-full"></div>,
+    },
+    {
+      id: "dashed",
+      label: "Dashed",
+      preview: (
+        <div className="w-10 h-1 border-b-2 border-dashed border-black"></div>
+      ),
+    },
+    {
+      id: "paint",
+      label: "Paint",
+      preview: (
+        <div className="w-10 h-2 bg-gradient-to-r from-blue-500 to-pink-500 rounded-full opacity-80 blur-[1px]"></div>
+      ),
+    },
+    {
+      id: "crayon",
+      label: "Crayon",
+      preview: (
+        <div className="w-10 h-1 bg-black/70 rounded-sm shadow-[0_0_3px_1px_rgba(0,0,0,0.3)]"></div>
+      ),
+    },
+    {
+      id: "oil-pastel",
+      label: "Oil Pastel",
+      preview: (
+        <div className="w-10 h-2 bg-gradient-to-r from-yellow-400 via-red-400 to-purple-400 rounded-full blur-[0.5px] opacity-90"></div>
+      ),
+    },
+>>>>>>> Stashed changes
   ];
 
   return (
@@ -75,15 +119,15 @@ export const Toolbar = ({ activeTool, onToolChange, onClear, onExport }) => {
             </Button>
           }
         >
-          <DropdownMenuItem onClick={() => onExport("png")}>
+          <DropdownMenuItem onClick={() => handleExport("png")}>
             <FileImage className="h-4 w-4" />
             Export as PNG
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onExport("svg")}>
+          <DropdownMenuItem onClick={() => handleExport("svg")}>
             <FileType className="h-4 w-4" />
             Export as SVG
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onExport("pdf")}>
+          <DropdownMenuItem onClick={() => handleExport("pdf")}>
             <FileType className="h-4 w-4" />
             Export as PDF
           </DropdownMenuItem>
