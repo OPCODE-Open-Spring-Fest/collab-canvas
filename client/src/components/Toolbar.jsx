@@ -10,6 +10,7 @@ import {
   FileImage,
   FileType,
   Brush,
+  SquareDashed, // New import for the area select tool
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/Button";
@@ -19,12 +20,12 @@ import { DropdownMenu, DropdownMenuItem } from "./ui/DropdownMenu";
 export const Toolbar = ({ activeTool, onToolChange, onClear, onExport }) => {
   const tools = [
     { type: "select", icon: MousePointer2 },
+    { type: "area-select", icon: SquareDashed }, // New Area Select Tool
     { type: "pen", icon: Pen },
     { type: "eraser", icon: Eraser },
     { type: "rectangle", icon: Square },
     { type: "circle", icon: Circle },
     { type: "line", icon: Minus },
-    
   ];
 
   const handleExport = (format) => {
