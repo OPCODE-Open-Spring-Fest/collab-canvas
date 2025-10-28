@@ -551,6 +551,7 @@ export const Canvas = () => {
     setSelectedShapeId(null);
     toast.success('Canvas cleared! 🧹');
   };
+
   const handleExport = (format) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -591,47 +592,6 @@ export const Canvas = () => {
         console.warn("Unsupported format:", format);
     }
   };
-
-  const handleExport = (format) => {
-  const canvas = canvasRef.current;
-  if (!canvas) return;
-
-  switch (format) {
-    case "png": {
-      const link = document.createElement("a");
-      link.download = "canvas.png";
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-      break;
-    }
-
-    case "pdf": {
-      const pdf = new jsPDF({
-        orientation: "landscape",
-        unit: "px",
-        format: [canvas.width, canvas.height],
-      });
-      const imgData = canvas.toDataURL("image/png");
-      pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
-      pdf.save("canvas.pdf");
-      break;
-    }
-
-    case "svg": {
-      const svgCtx = new C2S(canvas.width, canvas.height);
-    const svgData = svgCtx.getSerializedSvg();
-    const blob = new Blob([svgData], { type: "image/svg+xml" });
-    const link = document.createElement("a");
-    link.download = "canvas.svg";
-    link.href = URL.createObjectURL(blob);
-    link.click();
-      break;
-    }
-
-    default:
-      console.warn("Unsupported format:", format);
-  }
-};
 
 
   return (
