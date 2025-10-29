@@ -68,8 +68,19 @@ export const Canvas = () => {
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+  // small deterministic PRNG (mulberry32) so brush textures are stable across renders
+  const mulberry32 = (seed) => {
+    let t = seed >>> 0;
+    return () => {
+      t += 0x6D2B79F5;
+      let r = Math.imul(t ^ (t >>> 15), 1 | t);
+      r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+
   // Compute bounding box for a shape (world coords)
-  const getShapeBBox = (shape) => {
+  const getShapeBBox = useCallback((shape) => {
     if (!shape) return null;
     if (shape.type === SHAPE_TYPE.RECTANGLE || shape.type === SHAPE_TYPE.LINE) {
       const minX = Math.min(shape.start.x, shape.end.x);
@@ -86,24 +97,27 @@ export const Canvas = () => {
       return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
     }
     return null;
-  };
-
+  }, []);
+  
   // Returns array of handle objects: { x, y, dir }
-  const getHandlesForShape = (shape) => {
-    const bbox = getShapeBBox(shape);
-    if (!bbox) return [];
-    const { minX, minY, maxX, maxY } = bbox;
-    return [
-      { x: minX, y: minY, dir: 'nw' },
-      { x: (minX + maxX) / 2, y: minY, dir: 'n' },
-      { x: maxX, y: minY, dir: 'ne' },
-      { x: maxX, y: (minY + maxY) / 2, dir: 'e' },
-      { x: maxX, y: maxY, dir: 'se' },
-      { x: (minX + maxX) / 2, y: maxY, dir: 's' },
-      { x: minX, y: maxY, dir: 'sw' },
-      { x: minX, y: (minY + maxY) / 2, dir: 'w' },
-    ];
-  };
+  const getHandlesForShape = useCallback(
+    (shape) => {
+      const bbox = getShapeBBox(shape);
+      if (!bbox) return [];
+      const { minX, minY, maxX, maxY } = bbox;
+      return [
+        { x: minX, y: minY, dir: "nw" },
+        { x: (minX + maxX) / 2, y: minY, dir: "n" },
+        { x: maxX, y: minY, dir: "ne" },
+        { x: maxX, y: (minY + maxY) / 2, dir: "e" },
+        { x: maxX, y: maxY, dir: "se" },
+        { x: (minX + maxX) / 2, y: maxY, dir: "s" },
+        { x: minX, y: maxY, dir: "sw" },
+        { x: minX, y: (minY + maxY) / 2, dir: "w" },
+      ];
+    },
+    [getShapeBBox]
+  );
 
   const handleHitTest = (point, handle, size = 8) => {
     return Math.abs(point.x - handle.x) <= size / 2 && Math.abs(point.y - handle.y) <= size / 2;
@@ -111,7 +125,7 @@ export const Canvas = () => {
 
   const getHandleUnderCursor = (point) => {
     if (!selectedShapeId) return null;
-    const shape = shapes.find(s => s.id === selectedShapeId);
+    const shape = shapes.find((s) => s.id === selectedShapeId);
     if (!shape) return null;
     const handles = getHandlesForShape(shape);
     for (let i = 0; i < handles.length; i++) {
@@ -152,7 +166,7 @@ export const Canvas = () => {
           if (shape.path && shape.path.length > 1) {
             ctx.beginPath();
             ctx.moveTo(shape.path[0].x, shape.path[0].y);
-            shape.path.forEach(p => ctx.lineTo(p.x, p.y));
+            shape.path.forEach((p) => ctx.lineTo(p.x, p.y));
             ctx.stroke();
           }
           break;
@@ -184,10 +198,246 @@ export const Canvas = () => {
       }
       case SHAPE_TYPE.PEN:
         if (shape.path && shape.path.length > 1) {
-          ctx.beginPath();
-          ctx.moveTo(shape.path[0].x, shape.path[0].y);
-          shape.path.forEach(p => ctx.lineTo(p.x, p.y));
-          ctx.stroke();
+          const brush = shape.brush || "solid";
+
+          const drawPath = (offsetJitter = 0) => {
+            ctx.beginPath();
+            ctx.moveTo(
+              shape.path[0].x + (Math.random() - 0.5) * offsetJitter,
+              shape.path[0].y + (Math.random() - 0.5) * offsetJitter
+            );
+            shape.path.forEach((p) =>
+              ctx.lineTo(
+                p.x + (Math.random() - 0.5) * offsetJitter,
+                p.y + (Math.random() - 0.5) * offsetJitter
+              )
+            );
+            ctx.stroke();
+          };
+
+          // Reset any brush-specific state first
+          ctx.setLineDash([]);
+          ctx.shadowBlur = 0;
+          ctx.globalAlpha = 1;
+
+          if (brush === "dashed") {
+            const base = Math.max(4, shape.width * 3);
+            const dash = Math.round(base);
+            const gap = Math.round(base * 0.6);
+            ctx.setLineDash([dash, gap]);
+            ctx.lineWidth = shape.width;
+            ctx.strokeStyle = shape.color;
+            drawPath(0);
+            ctx.setLineDash([]);
+          }  else if (brush === 'paint') {
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  const baseWidth = Math.max(shape.width, 1.5); // Ensure a minimum body
+  const layers = 8;
+
+  for (let i = 0; i < layers; i++) {
+    const opacity = 0.18 + Math.random() * 0.12;
+    const color = tinycolor(shape.color)
+      .brighten((Math.random() - 0.5) * 2.5)
+      .setAlpha(opacity)
+      .toRgbString();
+
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.9;
+    const widthFactor = baseWidth < 4 ? 3.8 : 2.2;
+    ctx.lineWidth = baseWidth * (widthFactor + i * 0.2);
+
+    drawPath(0);
+  }
+
+  ctx.globalAlpha = 0.25;
+  ctx.lineWidth = baseWidth * (baseWidth < 4 ? 4.8 : 3.2);
+  ctx.strokeStyle = tinycolor(shape.color)
+    .lighten(3)
+    .setAlpha(0.25)
+    .toRgbString();
+  drawPath(0);
+
+  ctx.globalAlpha = 0.95;
+  ctx.lineWidth = baseWidth * (baseWidth < 4 ? 3.4 : 2.4);
+  ctx.strokeStyle = shape.color;
+  drawPath(0);
+
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = shape.width;
+} else if (brush === "crayon") {
+  const pts = shape.path;
+            if (pts.length >= 2) {
+              ctx.save();
+              ctx.globalCompositeOperation = 'source-over';
+              ctx.save();
+              ctx.globalAlpha = 0.72; // slightly translucent base
+              ctx.lineWidth = Math.max(1, shape.width * 1.6);
+              ctx.strokeStyle = tinycolor(shape.color).setAlpha(0.6).toRgbString();
+              ctx.lineCap = 'round';
+              ctx.lineJoin = 'round';
+              ctx.shadowBlur = Math.max(1, shape.width * 0.9);
+              ctx.shadowColor = tinycolor(shape.color).setAlpha(0.35).toRgbString();
+              ctx.beginPath();
+              ctx.moveTo(pts[0].x, pts[0].y);
+              for (let i = 1; i < pts.length; i++) {
+                const prev = pts[i - 1];
+                const cur = pts[i];
+                const midX = (prev.x + cur.x) / 2;
+                const midY = (prev.y + cur.y) / 2;
+                ctx.quadraticCurveTo(prev.x, prev.y, midX, midY);
+              }
+              ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+              ctx.stroke();
+              ctx.restore();
+              const scatterAlongSegment = (x0, y0, x1, y1, segIndex) => {
+                const dx = x1 - x0;
+                const dy = y1 - y0;
+                const dist = Math.hypot(dx, dy);
+                const step = Math.max(2, Math.floor(dist / Math.max(2, shape.width)));
+                const rngSeg = mulberry32((shape._seed || 1) ^ (segIndex + 1));
+                for (let s = 0; s < step; s++) {
+                  const t = s / step;
+                  const cx = x0 + dx * t;
+                  const cy = y0 + dy * t;
+
+                  const speckles = 1 + Math.round(shape.width * 0.6);
+                  for (let k = 0; k < speckles; k++) {
+                    const ox = (rngSeg() - 0.5) * shape.width * 1.8;
+                    const oy = (rngSeg() - 0.5) * shape.width * 1.8;
+                    const r = Math.max(0.4, rngSeg() * (shape.width * 0.6));
+                    const alpha = 0.04 + rngSeg() * 0.18;
+                    ctx.beginPath();
+                    ctx.fillStyle = tinycolor(shape.color).setAlpha(alpha).toRgbString();
+                    ctx.arc(cx + ox, cy + oy, r, 0, Math.PI * 2);
+                    ctx.fill();
+                  }
+                }
+              };
+
+              for (let i = 0; i < pts.length - 1; i++) {
+                const a = pts[i];
+                const b = pts[i + 1];
+                scatterAlongSegment(a.x, a.y, b.x, b.y, i);
+              }
+
+              for (let g = 0; g < 2; g++) {
+                ctx.globalAlpha = 0.5;
+                ctx.fillStyle = tinycolor(shape.color).darken(8 - g * 2).toRgbString();
+                for (let i = 0; i < pts.length - 1; i++) {
+                  const a = pts[i];
+                  const b = pts[i + 1];
+                  const rngG = mulberry32((shape._seed || 1) ^ (i + 1) ^ (g + 3));
+                  const midx = (a.x + b.x) / 2 + (rngG() - 0.5) * shape.width * 0.6;
+                  const midy = (a.y + b.y) / 2 + (rngG() - 0.5) * shape.width * 0.6;
+                  const r = Math.max(0.6, rngG() * (shape.width * 0.9));
+                  ctx.beginPath();
+                  ctx.arc(midx, midy, r, 0, Math.PI * 2);
+                  ctx.fill();
+                }
+              }
+
+              ctx.globalAlpha = 0.9;
+              ctx.lineWidth = Math.max(1, shape.width * 0.85);
+              ctx.strokeStyle = tinycolor(shape.color).darken(6).toRgbString();
+              ctx.beginPath();
+              ctx.moveTo(pts[0].x, pts[0].y);
+              for (let i = 1; i < pts.length; i++) {
+                const prev = pts[i - 1];
+                const cur = pts[i];
+                const midX = (prev.x + cur.x) / 2;
+                const midY = (prev.y + cur.y) / 2;
+                ctx.quadraticCurveTo(prev.x, prev.y, midX, midY);
+              }
+              const last = pts[pts.length - 1];
+              ctx.lineTo(last.x, last.y);
+              ctx.stroke();
+
+              ctx.globalAlpha = 0.08;
+              ctx.lineWidth = Math.max(1, shape.width * 1.6);
+              ctx.strokeStyle = tinycolor(shape.color).lighten(6).toRgbString();
+              ctx.beginPath();
+              ctx.moveTo(pts[0].x, pts[0].y);
+              for (let i = 1; i < pts.length; i++) {
+                const prev = pts[i - 1];
+                const cur = pts[i];
+                const midX = (prev.x + cur.x) / 2;
+                const midY = (prev.y + cur.y) / 2;
+                ctx.quadraticCurveTo(prev.x, prev.y, midX, midY);
+              }
+              ctx.lineTo(last.x, last.y);
+              ctx.stroke();
+
+              ctx.restore();
+            }
+            ctx.globalAlpha = 1;
+            ctx.lineWidth = shape.width;
+            ctx.strokeStyle = shape.color;
+          } else if (brush === "oil-pastel") {
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  const baseWidth = Math.max(shape.width, 2);
+  const seed = shape._seed || 1; // use shape seed for consistent randomness
+  const rng = mulberry32(seed);
+
+  for (let layer = 0; layer < 6; layer++) {
+    const variation = (rng() - 0.5) * 10;
+    const opacity = 0.12 + rng() * 0.1;
+    const pastelColor = tinycolor(shape.color)
+      .brighten(variation)
+      .setAlpha(opacity)
+      .toRgbString();
+
+    ctx.strokeStyle = pastelColor;
+    ctx.lineWidth = baseWidth * (1.2 + rng() * 0.6);
+
+    ctx.beginPath();
+    for (let i = 0; i < shape.path.length - 1; i++) {
+      const p1 = shape.path[i];
+      const p2 = shape.path[i + 1];
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const steps = Math.ceil(Math.hypot(dx, dy) / 1.5);
+
+      const segRng = mulberry32(seed ^ (layer * 999 + i * 31));
+
+      for (let s = 0; s < steps; s++) {
+        const t = s / steps;
+        const x = p1.x + dx * t + (segRng() - 0.5) * 2.5;
+        const y = p1.y + dy * t + (segRng() - 0.5) * 2.5;
+
+        if (segRng() > 0.2) {
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + 0.3, y + 0.3);
+        }
+      }
+    }
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = tinycolor(shape.color).darken(12).setAlpha(0.25).toRgbString();
+  ctx.lineWidth = baseWidth * 1.8;
+  ctx.globalAlpha = 0.9;
+  drawPath(0);
+  ctx.globalAlpha = 0.7;
+  ctx.lineWidth = baseWidth * 2.2;
+  ctx.strokeStyle = tinycolor(shape.color).setAlpha(0.25).toRgbString();
+  drawPath(0);
+
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = shape.width;
+} else {
+  //default(solid)
+            ctx.lineWidth = shape.width;
+            ctx.strokeStyle = shape.color;
+            ctx.setLineDash([]);
+            drawPath(0);
+          }
+          ctx.setLineDash([]);
+          ctx.shadowBlur = 0;
+          ctx.globalAlpha = 1;
         }
         break;
       default:
@@ -197,12 +447,12 @@ export const Canvas = () => {
     ctx.restore();
   }, []);
 
-  const drawHandles = (ctx, shape) => {
+  const drawHandles = useCallback((ctx, shape) => {
     const handles = getHandlesForShape(shape);
     if (!handles.length) return;
     ctx.save();
     const size = 8;
-    handles.forEach(h => {
+    handles.forEach((h) => {
       ctx.beginPath();
       ctx.fillStyle = "#ffffff";
       ctx.strokeStyle = "rgba(76,29,149,1)";
@@ -212,7 +462,7 @@ export const Canvas = () => {
       ctx.stroke();
     });
     ctx.restore();
-  };
+  }, [getHandlesForShape]);
 
   // --- Rerender Canvas ---
   useEffect(() => {
@@ -229,26 +479,26 @@ export const Canvas = () => {
     ctx.scale(scale, scale);
 
     // draw non-selected shapes first
-    shapes.forEach(shape => {
+    shapes.forEach((shape) => {
       if (shape.id !== selectedShapeId) drawShape(ctx, shape, false);
     });
 
     // draw selected shape last with handles
-    const selectedShape = shapes.find(s => s.id === selectedShapeId);
+    const selectedShape = shapes.find((s) => s.id === selectedShapeId);
     if (selectedShape) {
       drawShape(ctx, selectedShape, true);
       drawHandles(ctx, selectedShape);
     }
 
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-  }, [shapes, scale, offset, selectedShapeId, drawShape]);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+  }, [shapes, scale, offset, selectedShapeId, drawShape, drawHandles]);
 
   // Update selected shape style when color/width changes
   useEffect(() => {
     if (!selectedShapeId) return;
-    setShapes(prev => {
-      const i = prev.findIndex(s => s.id === selectedShapeId);
+    setShapes((prev) => {
+      const i = prev.findIndex((s) => s.id === selectedShapeId);
       if (i === -1) return prev;
       const cur = prev[i];
       if (cur.color === activeColor && cur.width === strokeWidth) return prev;
@@ -262,16 +512,16 @@ export const Canvas = () => {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     };
     resize();
-    window.addEventListener('resize', resize);
-    toast.success('Canvas ready! Local mode active.');
-    return () => window.removeEventListener('resize', resize);
+    window.addEventListener("resize", resize);
+    toast.success("Canvas ready! Local mode active.");
+    return () => window.removeEventListener("resize", resize);
   }, []);
 
   // --- Interaction Logic ---
@@ -284,11 +534,11 @@ export const Canvas = () => {
 
     if (isPanning) return;
 
-    if (activeTool === 'select') {
+    if (activeTool === "select") {
       // check handle hit first
       const handle = getHandleUnderCursor(worldPoint);
       // find topmost shape for selection
-      const hitShape = shapes.slice().reverse().find(shape => {
+      const hitShape = shapes.slice().reverse().find((shape) => {
         return shape && isPointInShape(worldPoint, shape);
       });
 
@@ -304,7 +554,7 @@ export const Canvas = () => {
       if (hitShape) {
         setSelectedShapeId(hitShape.id);
         setIsDrawing(true);
-        manipulationMode.current = { mode: 'move' };
+        manipulationMode.current = { mode: "move" };
         setActiveColor(hitShape.color);
         setStrokeWidth(hitShape.width);
       } else {
@@ -314,10 +564,10 @@ export const Canvas = () => {
       return;
     }
 
-    if (activeTool === 'area-select') {
+    if (activeTool === "area-select") {
       setSelectedShapeId(null);
       setIsDrawing(true);
-      manipulationMode.current = { mode: 'area' };
+      manipulationMode.current = { mode: "area" };
       return;
     }
 
@@ -325,7 +575,10 @@ export const Canvas = () => {
     if (Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('brush-')) {
       setSelectedShapeId(null);
       setIsDrawing(true);
-      manipulationMode.current = { mode: 'create' };
+      manipulationMode.current = { mode: "create" };
+      const brushType = activeTool.startsWith("brush-")
+        ? activeTool.slice("brush-".length)
+        : undefined;
       const newShape = {
         id: Date.now().toString(),
         type: activeTool,
@@ -337,9 +590,11 @@ export const Canvas = () => {
       if (activeTool === SHAPE_TYPE.PEN || activeTool.startsWith('brush-')) {
         newShape.type = SHAPE_TYPE.PEN;
         newShape.path = [worldPoint];
+        newShape.brush = brushType || "solid";
+        newShape._seed = Math.floor(Math.random() * 0xffffffff);
       }
       newShapeId.current = newShape.id;
-      setShapes(prev => [...prev, newShape]);
+      setShapes((prev) => [...prev, newShape]);
     } else {
       setSelectedShapeId(null);
       setIsDrawing(false);
@@ -365,7 +620,7 @@ export const Canvas = () => {
     if (isPanning) {
       const dx = e.clientX - lastMousePos.current.x;
       const dy = e.clientY - lastMousePos.current.y;
-      setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+      setOffset((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
       lastMousePos.current = { x: e.clientX, y: e.clientY };
       return;
     }
@@ -376,15 +631,15 @@ export const Canvas = () => {
     if (activeTool === 'select' && selectedShapeId && manipulationMode.current && manipulationMode.current.mode === 'move') {
       const dx = worldPoint.x - pointerStart.current.x;
       const dy = worldPoint.y - pointerStart.current.y;
-      setShapes(prev => {
-        const i = prev.findIndex(s => s.id === selectedShapeId);
+      setShapes((prev) => {
+        const i = prev.findIndex((s) => s.id === selectedShapeId);
         if (i === -1) return prev;
         const newShapes = [...prev];
         const sh = { ...newShapes[i] };
         sh.start = { x: sh.start.x + dx, y: sh.start.y + dy };
         sh.end = { x: sh.end.x + dx, y: sh.end.y + dy };
         if (sh.type === SHAPE_TYPE.PEN && sh.path) {
-          sh.path = sh.path.map(p => ({ x: p.x + dx, y: p.y + dy }));
+          sh.path = sh.path.map((p) => ({ x: p.x + dx, y: p.y + dy }));
         }
         newShapes[i] = sh;
         pointerStart.current = worldPoint;
@@ -399,7 +654,7 @@ export const Canvas = () => {
       if (!origShape || !origBBox) return;
 
       // compute new bbox based on which handles are moved
-      const shapeIndex = shapes.findIndex(s => s.id === selectedShapeId);
+      const shapeIndex = shapes.findIndex((s) => s.id === selectedShapeId);
       if (shapeIndex === -1) return;
 
       const newShapes = [...shapes];
@@ -408,10 +663,10 @@ export const Canvas = () => {
       // We'll compute a new bounding box keeping the opposite corner fixed depending on dir
       let { minX, minY, maxX, maxY } = origBBox;
       // which edges we change
-      const changeN = dir.includes('n');
-      const changeS = dir.includes('s');
-      const changeW = dir.includes('w');
-      const changeE = dir.includes('e');
+      const changeN = dir.includes("n");
+      const changeS = dir.includes("s");
+      const changeW = dir.includes("w");
+      const changeE = dir.includes("e");
 
       // Update edges
       if (changeW) minX = worldPoint.x;
@@ -493,9 +748,9 @@ export const Canvas = () => {
   // delete
   const handleDeleteSelectedShape = useCallback(() => {
     if (!selectedShapeId) return;
-    setShapes(prev => prev.filter(s => s.id !== selectedShapeId));
+    setShapes((prev) => prev.filter((s) => s.id !== selectedShapeId));
     setSelectedShapeId(null);
-    toast.success('Shape deleted! 🗑️');
+    toast.success("Shape deleted! 🗑️");
   }, [selectedShapeId]);
 
   useEffect(() => {
@@ -507,8 +762,8 @@ export const Canvas = () => {
         handleDeleteSelectedShape();
       }
     };
-    window.addEventListener('keydown', handleDeleteKey);
-    return () => window.removeEventListener('keydown', handleDeleteKey);
+    window.addEventListener("keydown", handleDeleteKey);
+    return () => window.removeEventListener("keydown", handleDeleteKey);
   }, [selectedShapeId, handleDeleteSelectedShape]);
 
   const handleJoinRoom = () => { };
@@ -516,7 +771,7 @@ export const Canvas = () => {
 
   // cursor logic: prefer hovered handle
   const getCursor = () => {
-    if (isPanning) return isPointerDown ? 'cursor-grabbing' : 'cursor-grab';
+    if (isPanning) return isPointerDown ? "cursor-grabbing" : "cursor-grab";
     if (hoveredHandle) {
       const dir = hoveredHandle.dir;
       if (dir === 'n' || dir === 's') return 'ns-resize';
@@ -675,7 +930,7 @@ export const Canvas = () => {
         onMouseUp={stopDrawing}
         onMouseLeave={stopDrawing}
         onWheel={(e) => {
-          e.preventDefault(); const handler = e; /* reuse handleWheel? kept inline for brevity */
+          e.preventDefault();
           // simple zoom behavior: ctrl+wheel maybe
           const zoomSensitivity = 0.001;
           const scrollDelta = e.deltaY;
