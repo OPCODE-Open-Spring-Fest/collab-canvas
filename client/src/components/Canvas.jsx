@@ -13,6 +13,7 @@ const SHAPE_TYPE = {
   RECTANGLE: "rectangle",
   LINE: "line",
   PEN: "pen",
+  CIRCLE: "circle",
 };
 
 export const Canvas = () => {
@@ -80,24 +81,37 @@ export const Canvas = () => {
   };
 
   // Compute bounding box for a shape (world coords)
-  const getShapeBBox = useCallback((shape) => {
-    if (!shape) return null;
-    if (shape.type === SHAPE_TYPE.RECTANGLE || shape.type === SHAPE_TYPE.LINE) {
-      const minX = Math.min(shape.start.x, shape.end.x);
-      const maxX = Math.max(shape.start.x, shape.end.x);
-      const minY = Math.min(shape.start.y, shape.end.y);
-      const maxY = Math.max(shape.start.y, shape.end.y);
-      return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
-    }
-    if (shape.type === SHAPE_TYPE.PEN && shape.path && shape.path.length) {
-      const minX = Math.min(...shape.path.map(p => p.x));
-      const maxX = Math.max(...shape.path.map(p => p.x));
-      const minY = Math.min(...shape.path.map(p => p.y));
-      const maxY = Math.max(...shape.path.map(p => p.y));
-      return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
-    }
-    return null;
-  }, []);
+ const getShapeBBox = useCallback((shape) => {
+  if (!shape) return null;
+
+  if (shape.type === SHAPE_TYPE.RECTANGLE || shape.type === SHAPE_TYPE.LINE) {
+    const minX = Math.min(shape.start.x, shape.end.x);
+    const maxX = Math.max(shape.start.x, shape.end.x);
+    const minY = Math.min(shape.start.y, shape.end.y);
+    const maxY = Math.max(shape.start.y, shape.end.y);
+    return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+  }
+
+  if (shape.type === SHAPE_TYPE.CIRCLE) {
+    const r = Math.max(shape.radius || 0, 0);
+    const minX = shape.start.x - r;
+    const maxX = shape.start.x + r;
+    const minY = shape.start.y - r;
+    const maxY = shape.start.y + r;
+    return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+  }
+
+  if (shape.type === SHAPE_TYPE.PEN && shape.path && shape.path.length) {
+    const minX = Math.min(...shape.path.map(p => p.x));
+    const maxX = Math.max(...shape.path.map(p => p.x));
+    const minY = Math.min(...shape.path.map(p => p.y));
+    const maxY = Math.max(...shape.path.map(p => p.y));
+    return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+  }
+
+  return null;
+}, []);
+
 
   // Returns array of handle objects: { x, y, dir }
   const getHandlesForShape = useCallback(
@@ -137,49 +151,21 @@ export const Canvas = () => {
   };
 
   // --- Drawing Utilities ---
-  const drawShape = useCallback((ctx, shape, isSelected = false) => {
-    ctx.save();
-    ctx.beginPath();
-    ctx.strokeStyle = shape.color;
-    ctx.lineWidth = shape.width;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.setLineDash([]);
-    ctx.globalAlpha = 1;
+ const drawShape = useCallback((ctx, shape, isSelected = false) => {
+  ctx.save();
+  ctx.beginPath();
+  ctx.strokeStyle = shape.color;
+  ctx.lineWidth = shape.width;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
 
-    if (isSelected) {
+  if (isSelected) {
       // draw purple glow under the stroke for visibility
-      ctx.save();
-      ctx.lineWidth = shape.width + 4;
-      ctx.strokeStyle = "rgba(76,29,149,1)";
-      switch (shape.type) {
-        case SHAPE_TYPE.LINE:
-          ctx.beginPath();
-          ctx.moveTo(shape.start.x, shape.start.y);
-          ctx.lineTo(shape.end.x, shape.end.y);
-          ctx.stroke();
-          break;
-        case SHAPE_TYPE.RECTANGLE:
-          ctx.strokeRect(shape.start.x, shape.start.y, shape.end.x - shape.start.x, shape.end.y - shape.start.y);
-          break;
-        case SHAPE_TYPE.PEN:
-          if (shape.path && shape.path.length > 1) {
-            ctx.beginPath();
-            ctx.moveTo(shape.path[0].x, shape.path[0].y);
-            shape.path.forEach((p) => ctx.lineTo(p.x, p.y));
-            ctx.stroke();
-          }
-          break;
-        default:
-          break;
-      }
-      ctx.restore();
-
-      // then draw the actual shape on top
-      ctx.strokeStyle = shape.color;
-      ctx.lineWidth = shape.width;
-    }
-
+    ctx.save();
+    ctx.lineWidth = shape.width + 4;
+    ctx.strokeStyle = "rgba(76,29,149,1)";
     switch (shape.type) {
       case SHAPE_TYPE.LINE:
         ctx.beginPath();
@@ -187,82 +173,129 @@ export const Canvas = () => {
         ctx.lineTo(shape.end.x, shape.end.y);
         ctx.stroke();
         break;
-      case SHAPE_TYPE.RECTANGLE: {
-        const x = shape.start.x;
-        const y = shape.start.y;
-        const width = shape.end.x - shape.start.x;
-        const height = shape.end.y - shape.start.y;
-        ctx.beginPath();
-        ctx.strokeRect(x, y, width, height);
+      case SHAPE_TYPE.RECTANGLE:
+        ctx.strokeRect(
+          shape.start.x,
+          shape.start.y,
+          shape.end.x - shape.start.x,
+          shape.end.y - shape.start.y
+        );
         break;
-      }
+      case SHAPE_TYPE.CIRCLE:
+        ctx.beginPath();
+        ctx.arc(shape.start.x, shape.start.y, shape.radius || 0, 0, Math.PI * 2);
+        ctx.stroke();
+        break;
       case SHAPE_TYPE.PEN:
         if (shape.path && shape.path.length > 1) {
-          const brush = shape.brush || "solid";
+          ctx.beginPath();
+          ctx.moveTo(shape.path[0].x, shape.path[0].y);
+          shape.path.forEach((p) => ctx.lineTo(p.x, p.y));
+          ctx.stroke();
+        }
+        break;
+      default:
+        break;
+    }
+    ctx.restore();
 
-          const drawPath = (offsetJitter = 0) => {
-            ctx.beginPath();
-            ctx.moveTo(
-              shape.path[0].x + (Math.random() - 0.5) * offsetJitter,
-              shape.path[0].y + (Math.random() - 0.5) * offsetJitter
-            );
-            shape.path.forEach((p) =>
-              ctx.lineTo(
-                p.x + (Math.random() - 0.5) * offsetJitter,
-                p.y + (Math.random() - 0.5) * offsetJitter
-              )
-            );
-            ctx.stroke();
-          };
+      // then draw the actual shape on top
+      ctx.strokeStyle = shape.color;
+      ctx.lineWidth = shape.width;
+    }
 
-          // Reset any brush-specific state first
+  switch (shape.type) {
+    case SHAPE_TYPE.LINE:
+      ctx.beginPath();
+      ctx.moveTo(shape.start.x, shape.start.y);
+      ctx.lineTo(shape.end.x, shape.end.y);
+      ctx.stroke();
+      break;
+
+    case SHAPE_TYPE.RECTANGLE: {
+      const x = shape.start.x;
+      const y = shape.start.y;
+      const width = shape.end.x - shape.start.x;
+      const height = shape.end.y - shape.start.y;
+      ctx.beginPath();
+      ctx.strokeRect(x, y, width, height);
+      break;
+    }
+
+    case SHAPE_TYPE.CIRCLE: {
+      const r = Math.max(shape.radius || 0, 0);
+      ctx.beginPath();
+      ctx.arc(shape.start.x, shape.start.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+
+    case SHAPE_TYPE.PEN:
+      if (shape.path && shape.path.length > 1) {
+        const brush = shape.brush || "solid";
+
+        const drawPath = (offsetJitter = 0) => {
+          ctx.beginPath();
+          ctx.moveTo(
+            shape.path[0].x + (Math.random() - 0.5) * offsetJitter,
+            shape.path[0].y + (Math.random() - 0.5) * offsetJitter
+          );
+          shape.path.forEach((p) =>
+            ctx.lineTo(
+              p.x + (Math.random() - 0.5) * offsetJitter,
+              p.y + (Math.random() - 0.5) * offsetJitter
+            )
+          );
+          ctx.stroke();
+        };
+
+        // Reset brush states
+        ctx.setLineDash([]);
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+
+        if (brush === "dashed") {
+          const base = Math.max(4, shape.width * 3);
+          const dash = Math.round(base);
+          const gap = Math.round(base * 0.6);
+          ctx.setLineDash([dash, gap]);
+          ctx.lineWidth = shape.width;
+          ctx.strokeStyle = shape.color;
+          drawPath(0);
           ctx.setLineDash([]);
-          ctx.shadowBlur = 0;
-          ctx.globalAlpha = 1;
-
-          if (brush === "dashed") {
-            const base = Math.max(4, shape.width * 3);
-            const dash = Math.round(base);
-            const gap = Math.round(base * 0.6);
-            ctx.setLineDash([dash, gap]);
-            ctx.lineWidth = shape.width;
-            ctx.strokeStyle = shape.color;
-            drawPath(0);
-            ctx.setLineDash([]);
-          } else if (brush === 'paint') {
-            ctx.lineCap = "round";
+        } else if (brush === "paint") {
+           ctx.lineCap = "round";
             ctx.lineJoin = "round";
+          const baseWidth = Math.max(shape.width, 1.5);
+          const layers = 8;
 
-            const baseWidth = Math.max(shape.width, 1.5); // Ensure a minimum body
-            const layers = 8;
-
-            for (let i = 0; i < layers; i++) {
-              const opacity = 0.18 + Math.random() * 0.12;
-              const color = tinycolor(shape.color)
-                .brighten((Math.random() - 0.5) * 2.5)
-                .setAlpha(opacity)
-                .toRgbString();
-
-              ctx.strokeStyle = color;
-              ctx.globalAlpha = 0.9;
-              const widthFactor = baseWidth < 4 ? 3.8 : 2.2;
-              ctx.lineWidth = baseWidth * (widthFactor + i * 0.2);
-
-              drawPath(0);
-            }
-
-            ctx.globalAlpha = 0.25;
-            ctx.lineWidth = baseWidth * (baseWidth < 4 ? 4.8 : 3.2);
-            ctx.strokeStyle = tinycolor(shape.color)
-              .lighten(3)
-              .setAlpha(0.25)
+          for (let i = 0; i < layers; i++) {
+            const opacity = 0.18 + Math.random() * 0.12;
+            const color = tinycolor(shape.color)
+              .brighten((Math.random() - 0.5) * 2.5)
+              .setAlpha(opacity)
               .toRgbString();
-            drawPath(0);
 
-            ctx.globalAlpha = 0.95;
-            ctx.lineWidth = baseWidth * (baseWidth < 4 ? 3.4 : 2.4);
-            ctx.strokeStyle = shape.color;
+            ctx.strokeStyle = color;
+            ctx.globalAlpha = 0.9;
+            const widthFactor = baseWidth < 4 ? 3.8 : 2.2;
+            ctx.lineWidth = baseWidth * (widthFactor + i * 0.2);
+
             drawPath(0);
+          }
+
+          ctx.globalAlpha = 0.25;
+          ctx.lineWidth = baseWidth * (baseWidth < 4 ? 4.8 : 3.2);
+          ctx.strokeStyle = tinycolor(shape.color)
+            .lighten(3)
+            .setAlpha(0.25)
+            .toRgbString();
+          drawPath(0);
+
+          ctx.globalAlpha = 0.95;
+          ctx.lineWidth = baseWidth * (baseWidth < 4 ? 3.4 : 2.4);
+          ctx.strokeStyle = shape.color;
+          drawPath(0);
 
             ctx.globalAlpha = 1;
             ctx.lineWidth = shape.width;
@@ -593,6 +626,9 @@ export const Canvas = () => {
         newShape.brush = brushType || "solid";
         newShape._seed = Math.floor(Math.random() * 0xffffffff);
       }
+      if (activeTool === SHAPE_TYPE.CIRCLE) {
+      newShape.radius = 0;
+    }
       newShapeId.current = newShape.id;
       setShapes((prev) => [...prev, newShape]);
     } else {
@@ -625,7 +661,7 @@ export const Canvas = () => {
       return;
     }
 
-    if (!isDrawing) return;
+  if (!isDrawing) return;
 
     // MOVE
     if (activeTool === 'select' && selectedShapeId && manipulationMode.current && manipulationMode.current.mode === 'move') {
@@ -709,7 +745,19 @@ export const Canvas = () => {
         sh.start = { x: nx, y: ny };
         sh.end = { x: nx + nw, y: ny + nh };
       }
+      if (sh.type === SHAPE_TYPE.CIRCLE) {
+      // Resize based on bounding box change
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      const newRadius = Math.max(
+        Math.abs(maxX - minX),
+        Math.abs(maxY - minY)
+      ) / 2;
 
+      sh.start = { x: cx, y: cy };
+      sh.radius = newRadius;
+      sh.end = { x: cx + newRadius, y: cy }; // optional
+    }
       newShapes[shapeIndex] = sh;
       setShapes(newShapes);
       return;
@@ -732,6 +780,15 @@ export const Canvas = () => {
         } else if (cur.type === SHAPE_TYPE.LINE || cur.type === SHAPE_TYPE.RECTANGLE) {
           cur.end = worldPoint;
         }
+        else if (cur.type === SHAPE_TYPE.CIRCLE) {
+        // Circle creation: start = center, drag defines radius
+        const dx = worldPoint.x - cur.start.x;
+        const dy = worldPoint.y - cur.start.y;
+        const r = Math.sqrt(dx * dx + dy * dy);
+        cur.radius = r;
+        cur.end = worldPoint; // optional for reference
+      }
+
         return newShapes;
       });
     }
