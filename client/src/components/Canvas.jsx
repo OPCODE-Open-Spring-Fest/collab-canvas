@@ -98,7 +98,7 @@ export const Canvas = () => {
     }
     return null;
   }, []);
-  
+
   // Returns array of handle objects: { x, y, dir }
   const getHandlesForShape = useCallback(
     (shape) => {
@@ -229,45 +229,45 @@ export const Canvas = () => {
             ctx.strokeStyle = shape.color;
             drawPath(0);
             ctx.setLineDash([]);
-          }  else if (brush === 'paint') {
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
+          } else if (brush === 'paint') {
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
 
-  const baseWidth = Math.max(shape.width, 1.5); // Ensure a minimum body
-  const layers = 8;
+            const baseWidth = Math.max(shape.width, 1.5); // Ensure a minimum body
+            const layers = 8;
 
-  for (let i = 0; i < layers; i++) {
-    const opacity = 0.18 + Math.random() * 0.12;
-    const color = tinycolor(shape.color)
-      .brighten((Math.random() - 0.5) * 2.5)
-      .setAlpha(opacity)
-      .toRgbString();
+            for (let i = 0; i < layers; i++) {
+              const opacity = 0.18 + Math.random() * 0.12;
+              const color = tinycolor(shape.color)
+                .brighten((Math.random() - 0.5) * 2.5)
+                .setAlpha(opacity)
+                .toRgbString();
 
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = 0.9;
-    const widthFactor = baseWidth < 4 ? 3.8 : 2.2;
-    ctx.lineWidth = baseWidth * (widthFactor + i * 0.2);
+              ctx.strokeStyle = color;
+              ctx.globalAlpha = 0.9;
+              const widthFactor = baseWidth < 4 ? 3.8 : 2.2;
+              ctx.lineWidth = baseWidth * (widthFactor + i * 0.2);
 
-    drawPath(0);
-  }
+              drawPath(0);
+            }
 
-  ctx.globalAlpha = 0.25;
-  ctx.lineWidth = baseWidth * (baseWidth < 4 ? 4.8 : 3.2);
-  ctx.strokeStyle = tinycolor(shape.color)
-    .lighten(3)
-    .setAlpha(0.25)
-    .toRgbString();
-  drawPath(0);
+            ctx.globalAlpha = 0.25;
+            ctx.lineWidth = baseWidth * (baseWidth < 4 ? 4.8 : 3.2);
+            ctx.strokeStyle = tinycolor(shape.color)
+              .lighten(3)
+              .setAlpha(0.25)
+              .toRgbString();
+            drawPath(0);
 
-  ctx.globalAlpha = 0.95;
-  ctx.lineWidth = baseWidth * (baseWidth < 4 ? 3.4 : 2.4);
-  ctx.strokeStyle = shape.color;
-  drawPath(0);
+            ctx.globalAlpha = 0.95;
+            ctx.lineWidth = baseWidth * (baseWidth < 4 ? 3.4 : 2.4);
+            ctx.strokeStyle = shape.color;
+            drawPath(0);
 
-  ctx.globalAlpha = 1;
-  ctx.lineWidth = shape.width;
-} else if (brush === "crayon") {
-  const pts = shape.path;
+            ctx.globalAlpha = 1;
+            ctx.lineWidth = shape.width;
+          } else if (brush === "crayon") {
+            const pts = shape.path;
             if (pts.length >= 2) {
               ctx.save();
               ctx.globalCompositeOperation = 'source-over';
@@ -375,61 +375,61 @@ export const Canvas = () => {
             ctx.lineWidth = shape.width;
             ctx.strokeStyle = shape.color;
           } else if (brush === "oil-pastel") {
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
 
-  const baseWidth = Math.max(shape.width, 2);
-  const seed = shape._seed || 1; // use shape seed for consistent randomness
-  const rng = mulberry32(seed);
+            const baseWidth = Math.max(shape.width, 2);
+            const seed = shape._seed || 1; // use shape seed for consistent randomness
+            const rng = mulberry32(seed);
 
-  for (let layer = 0; layer < 6; layer++) {
-    const variation = (rng() - 0.5) * 10;
-    const opacity = 0.12 + rng() * 0.1;
-    const pastelColor = tinycolor(shape.color)
-      .brighten(variation)
-      .setAlpha(opacity)
-      .toRgbString();
+            for (let layer = 0; layer < 6; layer++) {
+              const variation = (rng() - 0.5) * 10;
+              const opacity = 0.12 + rng() * 0.1;
+              const pastelColor = tinycolor(shape.color)
+                .brighten(variation)
+                .setAlpha(opacity)
+                .toRgbString();
 
-    ctx.strokeStyle = pastelColor;
-    ctx.lineWidth = baseWidth * (1.2 + rng() * 0.6);
+              ctx.strokeStyle = pastelColor;
+              ctx.lineWidth = baseWidth * (1.2 + rng() * 0.6);
 
-    ctx.beginPath();
-    for (let i = 0; i < shape.path.length - 1; i++) {
-      const p1 = shape.path[i];
-      const p2 = shape.path[i + 1];
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const steps = Math.ceil(Math.hypot(dx, dy) / 1.5);
+              ctx.beginPath();
+              for (let i = 0; i < shape.path.length - 1; i++) {
+                const p1 = shape.path[i];
+                const p2 = shape.path[i + 1];
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                const steps = Math.ceil(Math.hypot(dx, dy) / 1.5);
 
-      const segRng = mulberry32(seed ^ (layer * 999 + i * 31));
+                const segRng = mulberry32(seed ^ (layer * 999 + i * 31));
 
-      for (let s = 0; s < steps; s++) {
-        const t = s / steps;
-        const x = p1.x + dx * t + (segRng() - 0.5) * 2.5;
-        const y = p1.y + dy * t + (segRng() - 0.5) * 2.5;
+                for (let s = 0; s < steps; s++) {
+                  const t = s / steps;
+                  const x = p1.x + dx * t + (segRng() - 0.5) * 2.5;
+                  const y = p1.y + dy * t + (segRng() - 0.5) * 2.5;
 
-        if (segRng() > 0.2) {
-          ctx.moveTo(x, y);
-          ctx.lineTo(x + 0.3, y + 0.3);
-        }
-      }
-    }
-    ctx.stroke();
-  }
+                  if (segRng() > 0.2) {
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x + 0.3, y + 0.3);
+                  }
+                }
+              }
+              ctx.stroke();
+            }
 
-  ctx.strokeStyle = tinycolor(shape.color).darken(12).setAlpha(0.25).toRgbString();
-  ctx.lineWidth = baseWidth * 1.8;
-  ctx.globalAlpha = 0.9;
-  drawPath(0);
-  ctx.globalAlpha = 0.7;
-  ctx.lineWidth = baseWidth * 2.2;
-  ctx.strokeStyle = tinycolor(shape.color).setAlpha(0.25).toRgbString();
-  drawPath(0);
+            ctx.strokeStyle = tinycolor(shape.color).darken(12).setAlpha(0.25).toRgbString();
+            ctx.lineWidth = baseWidth * 1.8;
+            ctx.globalAlpha = 0.9;
+            drawPath(0);
+            ctx.globalAlpha = 0.7;
+            ctx.lineWidth = baseWidth * 2.2;
+            ctx.strokeStyle = tinycolor(shape.color).setAlpha(0.25).toRgbString();
+            drawPath(0);
 
-  ctx.globalAlpha = 1;
-  ctx.lineWidth = shape.width;
-} else {
-  //default(solid)
+            ctx.globalAlpha = 1;
+            ctx.lineWidth = shape.width;
+          } else {
+            //default(solid)
             ctx.lineWidth = shape.width;
             ctx.strokeStyle = shape.color;
             ctx.setLineDash([]);
@@ -847,7 +847,18 @@ export const Canvas = () => {
         console.warn("Unsupported format:", format);
     }
   };
-
+  useEffect(() => {
+    const handleGlobalWheel = (e) => {
+      // Block browser zoom if user scrolls with Ctrl/Cmd + trackpad
+      if (e.ctrlKey) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("wheel", handleGlobalWheel, { passive: false });
+    return () => {
+      window.removeEventListener("wheel", handleGlobalWheel);
+    };
+  }, []);
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-canvas">
