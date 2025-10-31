@@ -14,6 +14,7 @@ const SHAPE_TYPE = {
   LINE: "line",
   PEN: "pen",
   CIRCLE: "circle",
+  ERASER: "eraser",
 };
 
 export const Canvas = () => {
@@ -194,6 +195,22 @@ export const Canvas = () => {
           ctx.stroke();
         }
         break;
+        case SHAPE_TYPE.ERASER:
+  if (shape.path && shape.path.length > 1) {
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out"; 
+    ctx.lineWidth = shape.width;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(0,0,0,1)";
+    ctx.beginPath();
+    ctx.moveTo(shape.path[0].x, shape.path[0].y);
+    shape.path.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+    ctx.restore();
+  }
+  break;
+
       default:
         break;
     }
@@ -603,6 +620,22 @@ export const Canvas = () => {
       manipulationMode.current = { mode: "area" };
       return;
     }
+  if (activeTool === SHAPE_TYPE.ERASER) {
+  setIsDrawing(true);
+  manipulationMode.current = { mode: "erase" };
+  const ctx = canvasRef.current.getContext("2d");
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.lineWidth = strokeWidth * 2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  const { x, y } = getWorldPoint(e);
+  ctx.moveTo(x, y);
+  ctx.restore();
+  return;
+}
+
 
     // creation tools
     if (Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('brush-')) {
@@ -765,6 +798,21 @@ export const Canvas = () => {
 
     // AREA select skipping here
     if (activeTool === 'area-select') return;
+    if (manipulationMode.current?.mode === "erase") {
+  const ctx = canvasRef.current.getContext("2d");
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.lineWidth = strokeWidth * 2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const { x, y } = getWorldPoint(e);
+  ctx.lineTo(x, y);
+  ctx.stroke();
+  ctx.restore();
+  return;
+}
+
+
 
     // CREATE
     if (newShapeId.current && manipulationMode.current && manipulationMode.current.mode === 'create') {
@@ -800,6 +848,11 @@ export const Canvas = () => {
     setIsDrawing(false);
     newShapeId.current = null;
     manipulationMode.current = null;
+    if (manipulationMode.current?.mode === "erase") {
+  const ctx = canvasRef.current.getContext("2d");
+  ctx.globalCompositeOperation = "source-over";
+}
+
   };
 
   // delete
