@@ -52,7 +52,34 @@ export const Canvas = () => {
   const [hoveredHandle, setHoveredHandle] = useState(null); // { id, dir }
 
   const handleLogout = async () => {
-    // placeholder
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        toast.error("You are not logged in.");
+        return;
+      }
+
+      const res = await fetch("http://localhost:3000/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.message || "Logout failed");
+        return;
+      }
+
+      // Clear auth state and redirect
+      localStorage.removeItem("token");
+      setIsLoggedIn(false);
+      toast.success("Logged out successfully");
+      window.location.href = "/";
+    } catch (err) {
+      console.error("Logout error:", err);
+      toast.error("Logout failed. Please try again.");
+    }
   };
 
   // --- Helpers ---
