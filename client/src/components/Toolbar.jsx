@@ -11,23 +11,13 @@ import {
   FileType,
   Brush,
   SquareDashed, // New import for the area select tool
-  ImagePlus,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/Button";
 import { Separator } from "./ui/Separator";
 import { DropdownMenu, DropdownMenuItem } from "./ui/DropdownMenu";
-import { useRef } from "react";
 
-export const Toolbar = ({
-  activeTool,
-  onToolChange,
-  onClear,
-  onExport,
-  onImageUpload, 
-}) => {
-  const imageInputRef = useRef(null);
-
+export const Toolbar = ({ activeTool, onToolChange, onClear, onExport }) => {
   const tools = [
     { type: "select", icon: MousePointer2 },
     { type: "area-select", icon: SquareDashed }, // New Area Select Tool
@@ -40,14 +30,7 @@ export const Toolbar = ({
 
   const handleExport = (format) => {
     onExport(format);
-  };
-
-  const handleImageSelect = (e) => {
-    const file = e.target.files?.[0];
-    if (file && onImageUpload) {
-      onImageUpload(file); 
-    }
-  };
+  }
 
   const brushTypes = [
     {
@@ -140,25 +123,6 @@ export const Toolbar = ({
         </DropdownMenu>
 
         <Separator orientation="vertical" className="h-8 mx-1" />
-        <input
-          type="file"
-          accept="image/*"
-          ref={imageInputRef}
-          style={{ display: "none" }}
-          onChange={handleImageSelect}
-        />
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => imageInputRef.current?.click()}
-          className="h-10 w-10 transition-all duration-200 hover:bg-secondary active:scale-95"
-          aria-label="Upload image"
-        >
-          <ImagePlus className="h-5 w-5" />
-        </Button>
-
-        <Separator orientation="vertical" className="h-8 mx-1" />
-
         <Button
           variant="ghost"
           size="icon"
