@@ -15,6 +15,7 @@ const SHAPE_TYPE = {
   PEN: "pen",
   CIRCLE: "circle",
   ERASER: "eraser",
+  IMAGE: 'image',
 };
 
 export const Canvas = () => {
@@ -82,6 +83,30 @@ export const Canvas = () => {
     }
   };
 
+const handleImageUpload = (file) => {
+  if (!file) return; 
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const img = new Image();
+    img.onload = () => {
+      const newShape = {
+        id: Date.now().toString(),
+        type: SHAPE_TYPE.IMAGE,
+        image: img,
+        start: { x: 100, y: 100 },
+        end: { x: 100 + img.width, y: 100 + img.height },
+        width: img.width,
+        height: img.height,
+      };
+      setShapes((prev) => [...prev, newShape]);
+    };
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
+};
+
+
+
   // --- Helpers ---
   const getWorldPoint = (e) => {
     const canvas = canvasRef.current;
@@ -136,6 +161,14 @@ export const Canvas = () => {
     const maxY = Math.max(...shape.path.map(p => p.y));
     return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
   }
+  if (shape.type === SHAPE_TYPE.IMAGE) {
+  const minX = Math.min(shape.start.x, shape.end.x);
+  const maxX = Math.max(shape.start.x, shape.end.x);
+  const minY = Math.min(shape.start.y, shape.end.y);
+  const maxY = Math.max(shape.start.y, shape.end.y);
+  return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+}
+
 
   return null;
 }, []);
@@ -192,7 +225,7 @@ export const Canvas = () => {
   if (isSelected) {
       // draw purple glow under the stroke for visibility
     ctx.save();
-    ctx.lineWidth = shape.width + 4;
+    ctx.lineWidth = shape.type === SHAPE_TYPE.IMAGE ? 4 : shape.width + 4;
     ctx.strokeStyle = "rgba(76,29,149,1)";
     switch (shape.type) {
       case SHAPE_TYPE.LINE:
@@ -245,7 +278,7 @@ export const Canvas = () => {
 
       // then draw the actual shape on top
       ctx.strokeStyle = shape.color;
-      ctx.lineWidth = shape.width;
+      ctx.lineWidth = shape.type === SHAPE_TYPE.IMAGE ? 1 : shape.width;
     }
 
   switch (shape.type) {
@@ -517,6 +550,15 @@ export const Canvas = () => {
           ctx.globalAlpha = 1;
         }
         break;
+         case SHAPE_TYPE.IMAGE: {
+      const { image, start, end } = shape;
+      if (image) {
+        const width = end.x - start.x;
+        const height = end.y - start.y;
+        ctx.drawImage(image, start.x, start.y, width, height);
+      }
+      break;
+    }
       default:
         break;
     }
@@ -547,12 +589,15 @@ export const Canvas = () => {
     const ctx = canvas?.getContext("2d");
     if (!ctx) return;
 
-    // clear and reset transform
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // clear and reset transform
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
 
-    // apply pan & zoom
-    ctx.setTransform(1, 0, 0, 1, offset.x, offset.y);
+  // apply pan & zoom
+  ctx.setTransform(1, 0, 0, 1, offset.x, offset.y);
     ctx.scale(scale, scale);
 
     // draw non-selected shapes first
@@ -622,6 +667,7 @@ export const Canvas = () => {
       if (handle && hitShape && hitShape.id === selectedShapeId) {
         // begin resize
         const origShape = JSON.parse(JSON.stringify(hitShape));
+        if (hitShape.type === SHAPE_TYPE.IMAGE) origShape.image = hitShape.image;
         const origBBox = getShapeBBox(origShape);
         manipulationMode.current = { mode: 'resize', dir: handle.dir, origShape, origBBox };
         setIsDrawing(true);
@@ -629,11 +675,21 @@ export const Canvas = () => {
       }
 
       if (hitShape) {
+        try {
+          const _ctx = canvasRef.current?.getContext('2d');
+          if (_ctx) {
+            _ctx.globalCompositeOperation = 'source-over';
+            _ctx.globalAlpha = 1;
+            _ctx.shadowBlur = 0;
+          }
+        } catch (err) {
+          console.debug('[canvas] composite reset failed', err);
+        }
         setSelectedShapeId(hitShape.id);
         setIsDrawing(true);
-        manipulationMode.current = { mode: "move" };
+        manipulationMode.current = { mode: "pending-move" };
         setActiveColor(hitShape.color);
-        setStrokeWidth(hitShape.width);
+        if (hitShape.type === SHAPE_TYPE.PEN) setStrokeWidth(hitShape.width);
       } else {
         setSelectedShapeId(null);
         setIsDrawing(false);
@@ -665,7 +721,7 @@ export const Canvas = () => {
 
 
     // creation tools
-    if (Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('brush-')) {
+if ((Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('brush-')) && activeTool !== SHAPE_TYPE.IMAGE) {
       setSelectedShapeId(null);
       setIsDrawing(true);
       manipulationMode.current = { mode: "create" };
@@ -686,6 +742,15 @@ export const Canvas = () => {
         newShape.brush = brushType || "solid";
         newShape._seed = Math.floor(Math.random() * 0xffffffff);
       }
+      if (activeTool === SHAPE_TYPE.IMAGE) {
+  const hitShape = shapes.slice().reverse().find((shape) => isPointInShape(worldPoint, shape));
+  if (hitShape && hitShape.type === SHAPE_TYPE.IMAGE) {
+    // Just select, don't draw a new one
+    setSelectedShapeId(hitShape.id);
+    setIsDrawing(false);
+    return;
+  }
+}
       if (activeTool === SHAPE_TYPE.CIRCLE) {
       newShape.radius = 0;
     }
@@ -702,8 +767,13 @@ export const Canvas = () => {
     if (!shape) return false;
     const bbox = getShapeBBox(shape);
     if (!bbox) return false;
-    const tol = shape.width + 6;
-    return (point.x >= bbox.minX - tol && point.x <= bbox.maxX + tol && point.y >= bbox.minY - tol && point.y <= bbox.maxY + tol);
+    const tol = shape.type === SHAPE_TYPE.IMAGE ? 8 : (shape.width || 0) + 6;
+    return (
+      point.x >= bbox.minX - tol &&
+      point.x <= bbox.maxX + tol &&
+      point.y >= bbox.minY - tol &&
+      point.y <= bbox.maxY + tol
+    );
   };
 
   const draw = (e) => {
@@ -722,6 +792,24 @@ export const Canvas = () => {
     }
 
   if (!isDrawing) return;
+    if (
+      activeTool === 'select' &&
+      selectedShapeId &&
+      manipulationMode.current &&
+      manipulationMode.current.mode === 'pending-move'
+    ) {
+      const dx0 = worldPoint.x - pointerStart.current.x;
+      const dy0 = worldPoint.y - pointerStart.current.y;
+      const distSq0 = dx0 * dx0 + dy0 * dy0;
+      const threshold = 4 * 4; // squared threshold in world coords
+      if (distSq0 > threshold) {
+        // begin move: set pointerStart so subsequent deltas work from here
+        manipulationMode.current.mode = 'move';
+        pointerStart.current = worldPoint;
+      } else {
+        return;
+      }
+    }
 
     // MOVE
     if (activeTool === 'select' && selectedShapeId && manipulationMode.current && manipulationMode.current.mode === 'move') {
@@ -753,8 +841,9 @@ export const Canvas = () => {
       const shapeIndex = shapes.findIndex((s) => s.id === selectedShapeId);
       if (shapeIndex === -1) return;
 
-      const newShapes = [...shapes];
-      const sh = JSON.parse(JSON.stringify(origShape));
+  const newShapes = [...shapes];
+  const sh = JSON.parse(JSON.stringify(origShape));
+  if (origShape && origShape.type === SHAPE_TYPE.IMAGE) sh.image = origShape.image;
 
       // We'll compute a new bounding box keeping the opposite corner fixed depending on dir
       let { minX, minY, maxX, maxY } = origBBox;
@@ -873,14 +962,15 @@ export const Canvas = () => {
     setIsPointerDown(false);
     if (!isDrawing) return;
     setIsDrawing(false);
+    const prevMode = manipulationMode.current?.mode;
     newShapeId.current = null;
     manipulationMode.current = null;
-    if (manipulationMode.current?.mode === "erase") {
-  const ctx = canvasRef.current.getContext("2d");
-  ctx.globalCompositeOperation = "source-over";
-}
+    if (prevMode === "erase") {
+      const ctx = canvasRef.current?.getContext("2d");
+      if (ctx) ctx.globalCompositeOperation = "source-over";
+    }
 
-  };
+};
 
   // delete
   const handleDeleteSelectedShape = useCallback(() => {
@@ -1053,6 +1143,7 @@ export const Canvas = () => {
         onToolChange={handleToolChange}
         onClear={handleClear}
         onExport={handleExport}
+        onImageUpload={handleImageUpload}
       />
 
       {joined ? (
