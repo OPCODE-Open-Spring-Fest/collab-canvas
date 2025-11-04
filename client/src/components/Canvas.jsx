@@ -842,12 +842,20 @@ if ((Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('br
       }
 
       // For rectangle/line: set start/end
-      if (sh.type === SHAPE_TYPE.RECTANGLE || sh.type === SHAPE_TYPE.LINE) {
+      if (
+        sh.type === SHAPE_TYPE.RECTANGLE ||
+        sh.type === SHAPE_TYPE.LINE ||
+        sh.type === SHAPE_TYPE.IMAGE
+      ) {
         // Normalize start/end so start is top-left and end is bottom-right for storage simplicity
         const newStart = { x: Math.min(minX, maxX), y: Math.min(minY, maxY) };
         const newEnd = { x: Math.max(minX, maxX), y: Math.max(minY, maxY) };
         sh.start = newStart;
         sh.end = newEnd;
+        if (sh.type === SHAPE_TYPE.IMAGE) {
+          sh.width = newEnd.x - newStart.x;
+          sh.height = newEnd.y - newStart.y;
+        }
       }
 
       // For pen: scale all points from origBBox to new bbox
