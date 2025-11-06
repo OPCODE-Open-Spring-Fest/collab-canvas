@@ -12,6 +12,7 @@ import {
   Brush,
   SquareDashed, // New import for the area select tool
   ImagePlus,
+  Type
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/Button";
@@ -31,6 +32,7 @@ export const Toolbar = ({
   const tools = [
     { type: "select", icon: MousePointer2 },
     { type: "area-select", icon: SquareDashed }, // New Area Select Tool
+    {type:"text",icon:Type},
     { type: "pen", icon: Pen },
     { type: "eraser", icon: Eraser },
     { type: "rectangle", icon: Square },

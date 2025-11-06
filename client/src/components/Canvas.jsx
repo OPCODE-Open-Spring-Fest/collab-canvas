@@ -16,13 +16,49 @@ const SHAPE_TYPE = {
   CIRCLE: "circle",
   ERASER: "eraser",
   IMAGE: 'image',
+  TEXT:'text'
 };
+
+
 
 export const Canvas = () => {
   const canvasRef = useRef(null);
 
   const [shapes, setShapes] = useState([]);
   const [selectedShapeId, setSelectedShapeId] = useState(null);
+
+  const [textEditor, setTextEditor] = useState(null);
+    const editorRef = useRef(null);
+
+    const commitTextEditor = (keepOpen = false) => {
+      if (!textEditor) return;
+      setShapes((prev) => {
+        const i = prev.findIndex((s) => s.id === textEditor.id);
+        if (i === -1) return prev;
+        const copy = [...prev];
+        copy[i] = { ...copy[i], text: textEditor.value };
+        return copy;
+      });
+      if (!keepOpen) {
+        // close overlay and switch to select so user can resize/move immediately
+        setTextEditor(null);
+        setActiveTool('select');
+      }
+    };
+
+    const cancelTextEditor = () => {
+      setTextEditor(null);
+    };
+  
+    useEffect(() => {
+      if (textEditor && editorRef.current) {
+        const el = editorRef.current;
+        if (el && typeof el.focus === 'function') {
+          el.focus();
+    try { el.selectionStart = el.value.length; } catch { /* ignore if not supported */ }
+        }
+      }
+    }, [textEditor]);
 
   const [activeTool, setActiveTool] = useState("select");
   const [activeColor, setActiveColor] = useState("#000000");
@@ -33,6 +69,7 @@ export const Canvas = () => {
   const pointerStart = useRef({ x: 0, y: 0 });
   // manipulationMode will be null or an object: { mode: 'move'|'create'|'resize', dir?, origShape?, origBBox?, handleIndex? }
   const manipulationMode = useRef(null);
+  const newShapeRef = useRef(null);
 
   // Pan & zoom
   const [scale, setScale] = useState(1);
@@ -55,28 +92,56 @@ export const Canvas = () => {
   const handleLogout = async () => {
     // placeholder
   };
+  useEffect(() => {
+    if (!selectedShapeId) {
+      setTextEditor(null);
+      return;
+    }
+    const sh = shapes.find((s) => s.id === selectedShapeId);
+    if (!sh || sh.type !== SHAPE_TYPE.TEXT) {
+      setTextEditor(null);
+      return;
+    }
+  }, [selectedShapeId, shapes]);
 
-const handleImageUpload = (file) => {
-  if (!file) return; 
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    const img = new Image();
-    img.onload = () => {
-      const newShape = {
-        id: Date.now().toString(),
-        type: SHAPE_TYPE.IMAGE,
-        image: img,
-        start: { x: 100, y: 100 },
-        end: { x: 100 + img.width, y: 100 + img.height },
-        width: img.width,
-        height: img.height,
-      };
-      setShapes((prev) => [...prev, newShape]);
-    };
-    img.src = event.target.result;
+  const openTextEditor = (shape) => {
+    if (!shape) return;
+    const bbox = getShapeBBox(shape) || { minX: shape.start.x, minY: shape.start.y, width: 80, height: 24 };
+    setSelectedShapeId(shape.id);
+    setTextEditor({ id: shape.id, value: shape.text || "", bbox });
   };
-  reader.readAsDataURL(file);
-};
+
+  const onDoubleClick = (e) => {
+    const worldPoint = getWorldPoint(e);
+    const hitShape = shapes.slice().reverse().find((shape) => shape && isPointInShape(worldPoint, shape));
+    if (hitShape && hitShape.type === SHAPE_TYPE.TEXT) {
+      openTextEditor(hitShape);
+    }
+  };
+
+  const handleImageUpload = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const worldPoint = { x: 50, y: 50 };
+        const id = Date.now().toString();
+        const newShape = {
+          id,
+          type: SHAPE_TYPE.IMAGE,
+          color: activeColor,
+          width: strokeWidth,
+          start: worldPoint,
+          end: { x: worldPoint.x + img.width, y: worldPoint.y + img.height },
+          image: img,
+        };
+        setShapes((prev) => [...prev, newShape]);
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
 
 
 
@@ -104,6 +169,70 @@ const handleImageUpload = (file) => {
       r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
       return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
     };
+  };
+
+  const computeFittingFontSize = (text, maxWidth, maxHeight, preferredFontSize = 14, minFont = 6, maxFont = null) => {
+    if (!text) return preferredFontSize;
+    if (maxWidth <= 4 || maxHeight <= 4) return minFont;
+    const ctx2 = document.createElement('canvas').getContext('2d');
+    const lineHeightFor = (fs) => fs * 1.18;
+
+    const fits = (fs) => {
+      ctx2.font = `${fs}px sans-serif`;
+      const lh = lineHeightFor(fs);
+      const paragraphs = text.split('\n');
+      let totalLines = 0;
+      for (let p = 0; p < paragraphs.length; p++) {
+        const para = paragraphs[p] || '';
+        const words = para.split(' ');
+        let line = '';
+        for (let i = 0; i < words.length; i++) {
+          const word = words[i];
+          const wordWidth = ctx2.measureText(word).width;
+          if (wordWidth > maxWidth) {
+            // break into chunks
+            let ci = 0;
+            // flush current line
+            if (line) { totalLines++; line = ''; }
+            while (ci < word.length) {
+              let chunk = '';
+              while (ci < word.length) {
+                const next = chunk + word[ci];
+                if (ctx2.measureText(next).width <= maxWidth) {
+                  chunk = next; ci++; 
+                } else break;
+              }
+              if (!chunk && ci < word.length) { chunk = word[ci]; ci++; }
+              totalLines++;
+              if (totalLines * lh > maxHeight) return false;
+            }
+          } else {
+            const wtest = line ? line + ' ' + word : word;
+            const m = ctx2.measureText(wtest).width;
+            if (m > maxWidth) {
+              totalLines++;
+              line = word;
+            } else {
+              line = wtest;
+            }
+          }
+        }
+        if (line) totalLines++;
+        totalLines++;
+        if (totalLines * lh > maxHeight) return false;
+      }
+      return totalLines * lh <= maxHeight;
+    };
+
+    let hi = maxFont || Math.max(preferredFontSize, 48);
+    let lo = minFont;
+    if (fits(hi)) return hi;
+    if (!fits(lo)) return lo;
+    while (hi - lo > 1) {//applying binary search
+      const mid = Math.floor((hi + lo) / 2);
+      if (fits(mid)) lo = mid; else hi = mid;
+    }
+    return lo;
   };
 
   // Compute bounding box for a shape (world coords)
@@ -141,6 +270,13 @@ const handleImageUpload = (file) => {
   const maxY = Math.max(shape.start.y, shape.end.y);
   return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
 }
+  if (shape.type === SHAPE_TYPE.TEXT) {
+    const minX = Math.min(shape.start.x, shape.end.x);
+    const maxX = Math.max(shape.start.x, shape.end.x);
+    const minY = Math.min(shape.start.y, shape.end.y);
+    const maxY = Math.max(shape.start.y, shape.end.y);
+    return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+  }
 
 
   return null;
@@ -518,12 +654,99 @@ const handleImageUpload = (file) => {
             ctx.setLineDash([]);
             drawPath(0);
           }
-          ctx.setLineDash([]);
-          ctx.shadowBlur = 0;
-          ctx.globalAlpha = 1;
-        }
-        break;
-         case SHAPE_TYPE.IMAGE: {
+                ctx.setLineDash([]);
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
+              }
+              break;
+              case SHAPE_TYPE.TEXT: {
+            if (textEditor && textEditor.id === shape.id) {
+              // draw nothing (or optionally draw a faint placeholder / bounding box only)
+              break;
+            }
+
+            const { start, end } = shape;
+            const x = Math.min(start.x, end.x);
+            const y = Math.min(start.y, end.y);
+            const w = Math.max(4, Math.abs(end.x - start.x));
+            ctx.save();
+            ctx.fillStyle = shape.color || '#000';
+            const fs = shape.fontSize || 14;
+            ctx.font = `${fs}px sans-serif`;
+            ctx.textBaseline = 'top';
+            const text = shape.text || '';
+            const paragraphs = text.split('\n');
+            const lineHeight = fs * 1.18;
+            let globalLineIndex = 0;
+            // compute box height to respect vertical resizing
+            const h = Math.max(4, Math.abs(end.y - start.y));
+            const maxLines = Math.max(0, Math.floor(h / lineHeight));
+            // clip to the text box so overflowing lines are not visible
+            ctx.beginPath();
+            ctx.rect(x, y, w, h);
+            ctx.clip();
+            for (let p = 0; p < paragraphs.length; p++) {
+              const para = paragraphs[p];
+              const words = para.split(' ');
+              let line = '';
+              const lines = [];
+              for (let i = 0; i < words.length; i++) {
+                  const word = words[i];
+                  // if the single word is wider than the box, break it by character
+                  const wordWidth = ctx.measureText(word).width;
+                  if (wordWidth > w) {
+                    // remove current line first
+                    if (line) {
+                      lines.push(line);
+                      line = '';
+                    }
+                    // break the long word into chunks that fit
+                    let ci = 0;
+                    while (ci < word.length) {
+                      let chunk = '';
+                      while (ci < word.length) {
+                        const next = chunk + word[ci];
+                        if (ctx.measureText(next).width <= w) {
+                          chunk = next;
+                          ci++;
+                        } else {
+                          break;
+                        }
+                      }
+                      // if a single character is too wide (very small box), still push one char
+                      if (!chunk && ci < word.length) {
+                        chunk = word[ci];
+                        ci++;
+                      }
+                      lines.push(chunk);
+                    }
+                  } else {
+                    const wtest = line ? line + ' ' + word : word;
+                    const m = ctx.measureText(wtest);
+                    if (m.width > w && line) {
+                      lines.push(line);
+                      line = word;
+                    } else {
+                      line = wtest;
+                    }
+                  }
+                }
+              if (line) lines.push(line);
+
+              for (let i = 0; i < lines.length; i++) {
+                if (maxLines && globalLineIndex >= maxLines) break;
+                ctx.fillText(lines[i], x, y + globalLineIndex * lineHeight);
+                globalLineIndex++;
+              }
+              // After a paragraph, advance one line 
+              if (!maxLines || globalLineIndex < maxLines) globalLineIndex++;
+            }
+            // restore clipping
+            ctx.restore();
+            ctx.restore();
+            break;
+          }
+              case SHAPE_TYPE.IMAGE: {
       const { image, start, end } = shape;
       if (image) {
         const width = end.x - start.x;
@@ -537,7 +760,36 @@ const handleImageUpload = (file) => {
     }
 
     ctx.restore();
-  }, []);
+  }, [textEditor]);
+    useEffect(() => {
+      if (!selectedShapeId) {
+        setTextEditor(null);
+        return;
+      }
+      const sh = shapes.find(s => s.id === selectedShapeId);
+      if (!sh || sh.type !== SHAPE_TYPE.TEXT) {
+        setTextEditor(null);
+        return;
+      }
+      setTextEditor(null);
+    }, [selectedShapeId, shapes]);
+  
+    const editorStyle = textEditor
+      ? {
+          position: "absolute",
+          left: `${Math.round(textEditor.bbox.minX * scale + offset.x)}px`,
+          top: `${Math.round(textEditor.bbox.minY * scale + offset.y)}px`,
+          width: `${Math.max(40, Math.round(textEditor.bbox.width * scale))}px`,
+          height: `${Math.max(24, Math.round(textEditor.bbox.height * scale))}px`,
+          zIndex: 9998,
+        }
+      : null;
+    const editorFontSize = (() => {
+      if (!textEditor) return 14;
+      const sh = shapes.find(s => s.id === textEditor.id);
+      if (!sh) return 14;
+      return sh.fontSize || Math.max(12, (sh.width || 3) * 6);
+    })();
 
   const drawHandles = useCallback((ctx, shape) => {
     const handles = getHandlesForShape(shape);
@@ -596,6 +848,7 @@ const handleImageUpload = (file) => {
       const i = prev.findIndex((s) => s.id === selectedShapeId);
       if (i === -1) return prev;
       const cur = prev[i];
+      if (cur.type === SHAPE_TYPE.TEXT) return prev;
       if (cur.color === activeColor && cur.width === strokeWidth) return prev;
       const copy = [...prev];
       copy[i] = { ...cur, color: activeColor, width: strokeWidth };
@@ -626,6 +879,17 @@ const handleImageUpload = (file) => {
     pointerStart.current = worldPoint;
     lastMousePos.current = { x: e.clientX, y: e.clientY };
     manipulationMode.current = null;
+
+    if (textEditor) {
+      const tb = textEditor.bbox || textEditor;
+      if (tb) {
+        if (!(worldPoint.x >= tb.minX && worldPoint.x <= tb.maxX && worldPoint.y >= tb.minY && worldPoint.y <= tb.maxY)) {
+          commitTextEditor(false);
+          setSelectedShapeId(textEditor.id);
+          return;
+        }
+      }
+    }
 
     if (isPanning) return;
 
@@ -709,6 +973,7 @@ if ((Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('br
         start: worldPoint,
         end: worldPoint,
       };
+      newShapeRef.current = newShape;
       if (activeTool === SHAPE_TYPE.PEN || activeTool.startsWith('brush-')) {
         newShape.type = SHAPE_TYPE.PEN;
         newShape.path = [worldPoint];
@@ -724,6 +989,11 @@ if ((Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('br
     return;
   }
 }
+ if (activeTool === SHAPE_TYPE.TEXT) {
+        newShape.text = "";
+        newShape.fontSize = Math.max(12, strokeWidth * 6);
+        newShape.end = { x: worldPoint.x + 160, y: worldPoint.y + 48 };
+      }
       if (activeTool === SHAPE_TYPE.CIRCLE) {
       newShape.radius = 0;
     }
@@ -845,7 +1115,8 @@ if ((Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('br
       if (
         sh.type === SHAPE_TYPE.RECTANGLE ||
         sh.type === SHAPE_TYPE.LINE ||
-        sh.type === SHAPE_TYPE.IMAGE
+        sh.type === SHAPE_TYPE.IMAGE ||
+        sh.type === SHAPE_TYPE.TEXT
       ) {
         // Normalize start/end so start is top-left and end is bottom-right for storage simplicity
         const newStart = { x: Math.min(minX, maxX), y: Math.min(minY, maxY) };
@@ -855,6 +1126,17 @@ if ((Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('br
         if (sh.type === SHAPE_TYPE.IMAGE) {
           sh.width = newEnd.x - newStart.x;
           sh.height = newEnd.y - newStart.y;
+        }
+        if (sh.type === SHAPE_TYPE.TEXT) {
+          try {
+            const boxW = Math.max(4, newEnd.x - newStart.x);
+            const boxH = Math.max(4, newEnd.y - newStart.y);
+            const pref = sh.fontSize || Math.max(12, (sh.width || 3) * 6);
+            const fitted = computeFittingFontSize(sh.text || "", boxW, boxH, pref, 6, pref);
+            sh.fontSize = fitted;
+          } catch {
+            // ignore errors
+          }
         }
       }
 
@@ -933,9 +1215,16 @@ if ((Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('br
         cur.radius = r;
         cur.end = worldPoint; // optional for reference
       }
+      else if (cur.type === SHAPE_TYPE.TEXT) {
+              cur.end = worldPoint;
+            }
 
         return newShapes;
       });
+      if (newShapeRef.current && newShapeRef.current.id === newShapeId.current) {
+        const curFromState = shapes.find(s => s.id === newShapeId.current);
+        if (curFromState) newShapeRef.current = curFromState;
+      }
     }
   };
 
@@ -944,13 +1233,32 @@ if ((Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('br
     if (!isDrawing) return;
     setIsDrawing(false);
     const prevMode = manipulationMode.current?.mode;
+    const clickStart = pointerStart.current;
     newShapeId.current = null;
     manipulationMode.current = null;
     if (prevMode === "erase") {
       const ctx = canvasRef.current?.getContext("2d");
       if (ctx) ctx.globalCompositeOperation = "source-over";
     }
-
+    if (prevMode === 'create' && newShapeRef.current && newShapeRef.current.type === SHAPE_TYPE.TEXT) {
+      const sh = newShapeRef.current;
+      console.debug('[Canvas] created text shape, opening editor', sh.id, sh);
+      setSelectedShapeId(sh.id);
+      const bbox = getShapeBBox(sh) || { minX: sh.start.x, minY: sh.start.y, width: 160, height: 48 };
+      setTextEditor({ id: sh.id, value: sh.text || "", bbox });
+      // clear the ref
+      newShapeRef.current = null;
+    }
+    if (prevMode === 'pending-move' && activeTool === 'select' && selectedShapeId) {
+      const sh = shapes.find(s => s.id === selectedShapeId);
+      if (sh && sh.type === SHAPE_TYPE.TEXT) {
+        const hit = isPointInShape(clickStart, sh);
+        const handle = getHandleUnderCursor(clickStart);
+        if (hit && !handle) {
+          openTextEditor(sh);
+        }
+      }
+    }
 };
 
   // delete
@@ -1145,7 +1453,8 @@ if ((Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('br
         tabIndex={0}
         onFocus={() => setIsCanvasFocused(true)}
         onBlur={() => setIsCanvasFocused(false)}
-        onMouseDown={startDrawing}
+      onMouseDown={startDrawing}
+        onDoubleClick={onDoubleClick}
         onMouseMove={(e) => { onPointerMove(e); draw(e); }}
         onMouseUp={stopDrawing}
         onMouseLeave={stopDrawing}
@@ -1169,6 +1478,28 @@ if ((Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('br
         }}
         className={`${getCursor()} focus:outline-2 focus:outline-primary`}
       />
+
+      {textEditor && (
+          <div style={editorStyle} className="pointer-events-auto">
+            <textarea
+              ref={editorRef}
+              value={textEditor.value}
+              onChange={(ev) => setTextEditor((prev) => ({ ...prev, value: ev.target.value }))}
+              onBlur={() => commitTextEditor(false)}
+              onKeyDown={(ev) => {
+                if (ev.key === 'Enter' && !ev.shiftKey) {
+                  ev.preventDefault();
+                  commitTextEditor();
+                }
+                if (ev.key === 'Escape') {
+                  ev.preventDefault();
+                  cancelTextEditor();
+                }
+              }}
+              style={{ width: '100%', height: '100%', resize: 'none', padding: 8, fontSize: `${editorFontSize}px`, lineHeight: 1.18 }}
+            />
+          </div>
+        )}
 
       {isModalOpen && (
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 border border-gray-400 rounded-xl shadow-xl p-6 z-50 flex flex-col items-center gap-3">
