@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+
+  client:
+    build: ./client
+    ports:
+      - "3000:5173"
+    depends_on:
+      - server
+
+  server:
+    build: ./server
+    ports:
+      - "${SERVER_PORT:-5000}:5000"
+    environment:
+      PORT: 5000
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      MONGO_URI: ${MONGO_URI:-mongodb://db:27017/collabcanvas}
+      JWT_SECRET: ${JWT_SECRET:-THIS_IS_A_DEFAULT_NOT_A_SECRET}
+    depends_on:
+      - db
+  
+  db:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:

@@ -1,5 +1,4 @@
-import { Slider } from "./ui/slider";
-
+import { Slider } from "./ui/Slider";
 export const StrokeControl = ({ strokeWidth, onStrokeWidthChange }) => {
     return (
         <div className="fixed right-6 top-1/2 -translate-y-1/2 z-50">

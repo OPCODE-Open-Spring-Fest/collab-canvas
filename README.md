@@ -87,6 +87,45 @@ collab-canvas/
 ## 🚀 Getting Started
 
 Follow these steps to set up and run the project locally.
+- **Option 1: Docker (Recommended)** – The simplest way to get running with a single command.  
+- **Option 2: Manual Setup** – The traditional way if you want to manage the services yourself.
+
+## Option 1: Run with Docker (Recommended) 🐳
+
+This method starts the **client**, **server**, and a **MongoDB database** all at once.  
+You do **not** need Node.js or MongoDB installed on your machine.
+### Prequisites: you must have docker desktop installed and running 
+
+### Clone the Repository
+
+```bash
+git clone https://github.com/your-username/collab-canvas.git
+cd collab-canvas
+```
+
+### Run with Docker Compose
+
+```bash
+docker-compose up --build
+```
+
+Docker will build the images and start all three containers.
+
+Your application is now running:
+
+Frontend Client: http://localhost:3000
+
+Backend Server: http://localhost:5000
+
+MongoDB Database: Accessible to the server at mongodb://db:27017
+
+Note: The first build may take a few minutes. Subsequent builds will be faster.
+To stop all services, press Ctrl + C in your terminal, then run:
+```bash
+docker-compose down
+```
+
+## Option 2
 
 ### Prerequisites
 
