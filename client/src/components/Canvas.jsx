@@ -86,6 +86,8 @@ export const Canvas = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("token"));
 
+  const SERVER_URL = "http://localhost:3000";
+
   // Hovered handle for cursor feedback
   const [hoveredHandle, setHoveredHandle] = useState(null); // { id, dir }
 
@@ -1282,8 +1284,78 @@ if ((Object.values(SHAPE_TYPE).includes(activeTool) || activeTool.startsWith('br
     return () => window.removeEventListener("keydown", handleDeleteKey);
   }, [selectedShapeId, handleDeleteSelectedShape]);
 
-  const handleJoinRoom = () => { };
-  const handleExitRoom = () => { };
+    const _handleJoinRoom = () => {
+    if (!roomId || roomId.trim() === "") {
+      toast.error("Please enter a room id to join.");
+      return;
+    }
+    if (socket && joined) {
+      toast.info(`Already connected to room ${roomId}`);
+      setIsModalOpen(false);
+      return;
+    }
+    const s = io(SERVER_URL, { transports: ["websocket"] });
+    setSocket(s);
+    s.on("connect", () => {
+      console.log("socket connected", s.id);
+      s.emit("join-room", roomId);
+      setJoined(true);
+      setIsModalOpen(false);
+      toast.success(`Joined room ${roomId}`);
+    });
+
+    s.on("disconnect", (reason) => {
+      console.log("socket disconnected", reason);
+      setJoined(false);
+      setSocket(null);
+      toast.info("Disconnected from collaboration server.");
+    });
+    s.on("draw", (data) => {
+      try {
+        if (!data) return;
+        if (data.type === "shapes-update" && data.roomId === roomId && Array.isArray(data.shapes)) {
+          setShapes(data.shapes);
+        }
+      } catch (err) {
+        console.error("failed to apply incoming draw event", err);
+      }
+    });
+  };
+  const _handleExitRoom = () => {
+    if (!socket) {
+      setJoined(false);
+      setIsModalOpen(false);
+      return;
+    }
+    try {
+      socket.disconnect();
+    } catch (err) {
+      console.warn("error while disconnecting socket", err);
+    }
+    setSocket(null);
+    setJoined(false);
+    setIsModalOpen(false);
+    toast.info(`Left room ${roomId || "(unknown)"}`);
+  };
+  const handleJoinRoom = () => _handleJoinRoom();
+  const handleExitRoom = () => _handleExitRoom();
+
+  useEffect(() => {
+    if (!joined || !socket) return;
+    try {
+      socket.emit("draw", { roomId, type: "shapes-update", shapes });
+    } catch (err) {
+      console.warn("failed to emit shapes", err);
+    }
+  }, [shapes, joined, socket, roomId]);
+
+  useEffect(() => {
+    return () => {
+      if (socket) {
+        try { socket.disconnect(); } catch (err) { void err; }
+      }
+    };
+  }, []);
 
   // cursor logic: prefer hovered handle
   const getCursor = () => {
